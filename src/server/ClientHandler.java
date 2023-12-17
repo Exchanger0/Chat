@@ -1,11 +1,8 @@
 package server;
 
-import main.Request;
+import main.RequestResponse;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.math.BigInteger;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +14,7 @@ public class ClientHandler implements Runnable {
     private final Server server;
     private final BufferedReader reader;
     private final PrintWriter writer;
+    private final ObjectOutputStream objectOutputStream;
 
     private User currentUser;
 
@@ -26,6 +24,7 @@ public class ClientHandler implements Runnable {
         try {
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             writer = new PrintWriter(socket.getOutputStream());
+            objectOutputStream = new ObjectOutputStream(socket.getOutputStream());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -37,20 +36,24 @@ public class ClientHandler implements Runnable {
             String currThreadName = Thread.currentThread().getName();
             String str;
             while (!Thread.currentThread().isInterrupted() && (str = reader.readLine()) != null) {
-                if (str.equals(Request.REGISTRATION.name())) {
+                if (str.equals(RequestResponse.REGISTRATION.name())) {
                     System.out.println("Start registration " + currThreadName);
                     registration();
-                    writer.println("Registration success");
+                    writer.println(RequestResponse.SUCCESSFUL_REGISTRATION.name());
                     writer.flush();
                     System.out.println("End registration " + currThreadName);
-                } else if (str.equals(Request.LOG_IN.name())) {
+                } else if (str.equals(RequestResponse.LOG_IN.name())) {
                     System.out.println("Start login " + currThreadName);
                     logIn();
                     System.out.println("End login " + currThreadName);
-                } /*else if (str.equals(Request.LOG_OUT.name())) {
-                    currentUser = null;
-                    System.out.println("Log out " + currThreadName);
-                } */else if (str.equals("exit")) {
+                } else if (str.equals(RequestResponse.GET_CHAT_NAMES.name())) {
+                    objectOutputStream.writeObject(currentUser.getChatNames());
+                    objectOutputStream.flush();
+                } else if (str.equals(RequestResponse.ADD_CHAT.name())) {
+                    currentUser.addChat(new Chat(reader.readLine()));
+                    objectOutputStream.writeObject(currentUser.getChatNames());
+                    objectOutputStream.flush();
+                } else if (str.equals(RequestResponse.EXIT.name())) {
                     System.out.println("Exit from system " + currThreadName);
                     server.removeThisThread(Thread.currentThread());
                     break;
@@ -85,9 +88,9 @@ public class ClientHandler implements Runnable {
             User user = server.getUser(username, getHash(password));
             if (user != null) {
                 currentUser = user;
-                writer.println("Successful login");
+                writer.println(RequestResponse.SUCCESSFUL_LOGIN.name());
             } else {
-                writer.println("Login error");
+                writer.println(RequestResponse.LOGIN_ERROR.name());
             }
             writer.flush();
         } catch (IOException e) {
