@@ -8,12 +8,15 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 public class ClientHandler implements Runnable {
     private final Socket socket;
     private final Server server;
+    //ответы которые надо отправить клиенту
+    private final BlockingQueue<ServerResponse> responses = new ArrayBlockingQueue<>(30);
     private final BufferedReader reader;
-    private final PrintWriter writer;
     private final ObjectOutputStream objectOutputStream;
 
     private User currentUser;
@@ -23,7 +26,6 @@ public class ClientHandler implements Runnable {
         this.server = server;
         try {
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            writer = new PrintWriter(socket.getOutputStream());
             objectOutputStream = new ObjectOutputStream(socket.getOutputStream());
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -35,32 +37,34 @@ public class ClientHandler implements Runnable {
         try {
             String currThreadName = Thread.currentThread().getName();
             String str;
+            Thread senderThread = new Thread(new Sender(), "Sender"+currThreadName.substring(currThreadName.indexOf("-")));
+            System.out.println(senderThread.getName());
+            senderThread.start();
             while (!Thread.currentThread().isInterrupted() && (str = reader.readLine()) != null) {
                 if (str.equals(RequestResponse.REGISTRATION.name())) {
                     System.out.println("Start registration " + currThreadName);
                     registration();
-                    writer.println(RequestResponse.SUCCESSFUL_REGISTRATION.name());
-                    writer.flush();
+                    responses.add(new ServerResponse(RequestResponse.SUCCESSFUL_REGISTRATION, null));
                     System.out.println("End registration " + currThreadName);
                 } else if (str.equals(RequestResponse.LOG_IN.name())) {
                     System.out.println("Start login " + currThreadName);
                     logIn();
                     System.out.println("End login " + currThreadName);
                 } else if (str.equals(RequestResponse.GET_CHAT_NAMES.name())) {
-                    objectOutputStream.writeObject(currentUser.getChatNames());
-                    objectOutputStream.flush();
-                } else if (str.equals(RequestResponse.ADD_CHAT.name())) {
+                    responses.add(new ServerResponse(RequestResponse.GET_CHAT_NAMES, currentUser.getChatNames()));
+                } else if (str.equals(RequestResponse.UPDATE_CHAT.name())) {
                     currentUser.addChat(new Chat(reader.readLine()));
-                    objectOutputStream.writeObject(currentUser.getChatNames());
-                    objectOutputStream.flush();
+                    server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.UPDATE_CHAT, currentUser.getChatNames()));
                 } else if (str.equals(RequestResponse.EXIT.name())) {
                     System.out.println("Exit from system " + currThreadName);
+                    responses.add(new ServerResponse(RequestResponse.EXIT, null));
+                    server.deleteClientHandler(currentUser, this);
                     server.removeThisThread(Thread.currentThread());
                     break;
                 }
             }
             reader.close();
-            writer.close();
+            objectOutputStream.close();
             socket.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -74,7 +78,6 @@ public class ClientHandler implements Runnable {
 
             User user = new User(username, getHash(password));
             server.addUser(user);
-            System.out.println(user);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -86,13 +89,15 @@ public class ClientHandler implements Runnable {
             String password = reader.readLine();
 
             User user = server.getUser(username, getHash(password));
+            RequestResponse response;
             if (user != null) {
                 currentUser = user;
-                writer.println(RequestResponse.SUCCESSFUL_LOGIN.name());
+                server.addClientHandler(user, this);
+                response = RequestResponse.SUCCESSFUL_LOGIN;
             } else {
-                writer.println(RequestResponse.LOGIN_ERROR.name());
+                response = RequestResponse.LOGIN_ERROR;
             }
-            writer.flush();
+            responses.add(new ServerResponse(response, null));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -108,6 +113,35 @@ public class ClientHandler implements Runnable {
             return bigInteger.toString(16);
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+
+    public void addServerResponse(ServerResponse serverResponse) {
+        responses.add(serverResponse);
+    }
+
+    //поток отправляющий все задачи клиенту
+    private class Sender implements Runnable {
+
+        @Override
+        public void run() {
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    ServerResponse serverResponse = responses.take();
+                    if (serverResponse.response().equals(RequestResponse.EXIT)) {
+                        break;
+                    }
+                    objectOutputStream.writeUTF(serverResponse.response().name());
+                    objectOutputStream.flush();
+                    if (serverResponse.writeObject() != null) {
+                        objectOutputStream.writeObject(serverResponse.writeObject());
+                        objectOutputStream.flush();
+                    }
+                } catch (InterruptedException | IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
         }
     }
 }

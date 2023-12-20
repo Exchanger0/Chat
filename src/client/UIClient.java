@@ -1,7 +1,9 @@
 package client;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -19,20 +21,26 @@ import main.RequestResponse;
 
 import java.io.*;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.List;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
 
 public class UIClient extends Application {
 
     private Scene scene;
     private Socket socket;
     private PrintWriter writer;
-    private BufferedReader reader;
     private ObjectInputStream objectInputStream;
 
     private VBox mainMenu;
     private GridPane registrationMenu;
     private GridPane logInMenu;
     private BorderPane chatsMenu;
+
+    private String response;
+    private final CyclicBarrier forListener = new CyclicBarrier(2);
+    private Thread listenerThread;
 
     public static void main(String[] args) {
         launch(args);
@@ -43,23 +51,25 @@ public class UIClient extends Application {
         super.init();
         socket = new Socket("localhost", 8099);
         writer = new PrintWriter(socket.getOutputStream());
-        reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         objectInputStream = new ObjectInputStream(socket.getInputStream());
+        listenerThread = new Thread(new Listener());
+        listenerThread.setDaemon(true);
+        listenerThread.start();
     }
 
     @Override
-    public void start(Stage stage) throws Exception {
+    public void start(Stage stage) {
         mainMenu = initMainMenu();
 
         scene = new Scene(mainMenu);
         stage.setOnCloseRequest(e -> {
             try {
-                writer.println(RequestResponse.EXIT);
+                writer.println(RequestResponse.EXIT.name());
                 writer.flush();
                 writer.close();
-                reader.close();
                 objectInputStream.close();
                 socket.close();
+                listenerThread.interrupt();
             } catch (IOException ex) {
                 throw new RuntimeException(ex);
             }
@@ -73,6 +83,7 @@ public class UIClient extends Application {
         stage.show();
     }
 
+    //создает главное меню с кнопкой для регистрации и входа
     private VBox initMainMenu() {
         VBox root = new VBox();
         root.setAlignment(Pos.CENTER);
@@ -103,6 +114,7 @@ public class UIClient extends Application {
         return root;
     }
 
+    //создает меню входа или регистрации
     private GridPane initRegLogMenu(boolean isRegistration) {
         GridPane gridPane = new GridPane();
         gridPane.setAlignment(Pos.CENTER);
@@ -144,8 +156,10 @@ public class UIClient extends Application {
                 }));
 
         Button sendButton = new Button("Send");
+        //пока в usernameField или passwordField введены неверные данные кнопка неактивна
         sendButton.disableProperty().bind(errorUsernameLabel.textProperty().isEmpty().not()
                 .or(errorPasswordLabel.textProperty().isEmpty().not()));
+
         RequestResponse request;
         if (isRegistration) {
             request = RequestResponse.REGISTRATION;
@@ -158,23 +172,23 @@ public class UIClient extends Application {
             writer.println(passwordField.getText());
             writer.flush();
             try {
-                String response = reader.readLine();
-                if (response.equals(RequestResponse.SUCCESSFUL_REGISTRATION.name())){
-                    if (logInMenu == null){
-                        logInMenu = initRegLogMenu(false);
-                    }
-                    //имитация входа в аккаунт
-                    ((TextField)logInMenu.getChildren().get(1)).setText(usernameField.getText());
-                    ((TextField)logInMenu.getChildren().get(4)).setText(passwordField.getText());
-                    ((Button)((ButtonBar)logInMenu.getChildren().get(6)).getButtons().getFirst()).fire();
-                } else if (response.equals(RequestResponse.SUCCESSFUL_LOGIN.name())) {
-                    if (chatsMenu == null){
-                        chatsMenu = initChatsMenu();
-                    }
-                    scene.setRoot(chatsMenu);
-                }
-            } catch (IOException ex) {
+                forListener.await();
+            } catch (InterruptedException | BrokenBarrierException ex) {
                 throw new RuntimeException(ex);
+            }
+            if (response.equals(RequestResponse.SUCCESSFUL_REGISTRATION.name())){
+                if (logInMenu == null){
+                    logInMenu = initRegLogMenu(false);
+                }
+                //имитация входа в аккаунт
+                ((TextField)logInMenu.getChildren().get(1)).setText(usernameField.getText());
+                ((TextField)logInMenu.getChildren().get(4)).setText(passwordField.getText());
+                ((Button)((ButtonBar)logInMenu.getChildren().get(6)).getButtons().getFirst()).fire();
+            } else if (response.equals(RequestResponse.SUCCESSFUL_LOGIN.name())) {
+                if (chatsMenu == null){
+                    chatsMenu = initChatsMenu();
+                }
+                scene.setRoot(chatsMenu);
             }
         });
 
@@ -201,17 +215,13 @@ public class UIClient extends Application {
         return gridPane;
     }
 
+    //создает меню со списком чатов пользователя
     private BorderPane initChatsMenu() {
         BorderPane root = new BorderPane();
 
         ListView<String> chatNames = new ListView<>();
-        try {
-            writer.println(RequestResponse.GET_CHAT_NAMES.name());
-            writer.flush();
-            chatNames.setItems(FXCollections.observableList((List<String>)objectInputStream.readObject()));
-        } catch (IOException | ClassNotFoundException e) {
-            throw new RuntimeException(e);
-        }
+        writer.println(RequestResponse.GET_CHAT_NAMES.name());
+        writer.flush();
         chatNames.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
 
         //создает новый чат
@@ -244,14 +254,9 @@ public class UIClient extends Application {
             titleBox.setSpacing(5);
 
             okButton.setOnAction(e2 -> {
-                try {
-                    writer.println(RequestResponse.ADD_CHAT.name());
-                    writer.println(titleField.getText());
-                    writer.flush();
-                    chatNames.setItems(FXCollections.observableList((List<String>) objectInputStream.readObject()));
-                } catch (IOException | ClassNotFoundException ex) {
-                    throw new RuntimeException(ex);
-                }
+                writer.println(RequestResponse.UPDATE_CHAT.name());
+                writer.println(titleField.getText());
+                writer.flush();
                 stage.close();
             });
 
@@ -270,5 +275,30 @@ public class UIClient extends Application {
         root.setTop(createChat);
         root.setCenter(chatNames);
         return root;
+    }
+
+    //слушатель ответов от сервера
+    private class Listener implements Runnable{
+        @Override
+        public void run() {
+            while (!Thread.currentThread().isInterrupted()){
+                try {
+                    String serverResponse = objectInputStream.readUTF();
+
+                    if (serverResponse.equals(RequestResponse.UPDATE_CHAT.name()) || serverResponse.equals(RequestResponse.GET_CHAT_NAMES.name())){
+                        Object obj = objectInputStream.readObject();
+                        ObservableList<String> list = FXCollections.observableList((List<String>) obj);
+                        Platform.runLater(() -> ((ListView<String>)chatsMenu.getCenter()).setItems(list));
+                    } else {
+                        response = serverResponse;
+                        forListener.await();
+                    }
+                } catch (SocketException socketException){
+                    break;
+                } catch (IOException | BrokenBarrierException | InterruptedException | ClassNotFoundException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
     }
 }

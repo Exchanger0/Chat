@@ -3,6 +3,7 @@ package server;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -12,6 +13,8 @@ public class Server {
     //список созданных потоков
     private final ConcurrentHashMap<String,Thread> threads = new ConcurrentHashMap<>();
     private boolean isStop = false;
+    //сеансы всех клиентов одного пользователя
+    private final HashMap<User, ArrayList<ClientHandler>> userSessions = new HashMap<>();
 
     private Server() {
     }
@@ -51,7 +54,7 @@ public class Server {
         }
     }
 
-    //добавляем пользователя из проверенного источника
+    //добавляем пользователя
     public void addUser(User user){
         synchronized (users) {
             users.put(user.getUsername(), user);
@@ -74,6 +77,35 @@ public class Server {
     //удаление нерабочего потока
     public void removeThisThread(Thread th){
         threads.remove(th.getName());
+    }
+
+    //уведомление всех клиентов одного пользователя
+    public void notifyClientHandlers(User user, ServerResponse notification){
+        synchronized (userSessions) {
+            for (ClientHandler handler : userSessions.get(user)) {
+                handler.addServerResponse(notification);
+            }
+        }
+    }
+
+    //добавление клиента к текущей сессии
+    public void addClientHandler(User user, ClientHandler clientHandler){
+        synchronized (userSessions){
+            if (userSessions.containsKey(user)){
+                userSessions.get(user).add(clientHandler);
+            }else {
+                userSessions.put(user, new ArrayList<>(){{add(clientHandler);}});
+            }
+        }
+    }
+
+    //удаление клиента из текущей сессии
+    public void deleteClientHandler(User user, ClientHandler handler){
+        if (user == null)
+            return;
+        synchronized (userSessions){
+            userSessions.get(user).remove(handler);
+        }
     }
 
 }

@@ -29,11 +29,15 @@ public class User {
     }
 
     public List<String> getChatNames(){
-        return chats.stream().map(Chat::getName).collect(Collectors.toList());
+        synchronized (chats) {
+            return chats.stream().map(Chat::getName).collect(Collectors.toList());
+        }
     }
 
-    public void addChat(Chat chat){
-        chats.add(chat);
+    public synchronized void addChat(Chat chat){
+        synchronized (chats) {
+            chats.add(chat);
+        }
     }
 
     @Override

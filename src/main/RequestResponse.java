@@ -6,7 +6,7 @@ public enum RequestResponse {
     LOG_IN,
     GET_CHAT_NAMES,
     EXIT,
-    ADD_CHAT,
+    UPDATE_CHAT,
     //responses
     SUCCESSFUL_REGISTRATION,
     SUCCESSFUL_LOGIN, LOGIN_ERROR
