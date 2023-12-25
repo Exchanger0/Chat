@@ -1,6 +1,7 @@
 package server;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -8,13 +9,15 @@ import java.util.stream.Collectors;
 public class User {
     private final String username;
     private final String password;
-    private final ArrayList<Chat> chats = new ArrayList<>();
+    private final HashMap<String,Chat> chats = new HashMap<>();
 
     public User(String username, String password) {
         if (username.equals("admin")){
-            chats.add(new Chat("work"));
-            chats.add(new Chat("friends"));
-            chats.add(new Chat("Mother"));
+            chats.put("job", new Chat("job"));
+            Chat job = chats.get("job");
+            job.sendMessage("welcome");
+            job.sendMessage("to");
+            job.sendMessage("job");
         }
         this.username = username;
         this.password = password;
@@ -30,13 +33,17 @@ public class User {
 
     public List<String> getChatNames(){
         synchronized (chats) {
-            return chats.stream().map(Chat::getName).collect(Collectors.toList());
+            return chats.values().stream().map(Chat::getName).collect(Collectors.toList());
         }
+    }
+
+    public Chat getChat(String name){
+        return chats.get(name);
     }
 
     public synchronized void addChat(Chat chat){
         synchronized (chats) {
-            chats.add(chat);
+            chats.put(chat.getName(), chat);
         }
     }
 

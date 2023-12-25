@@ -8,6 +8,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
@@ -20,6 +21,7 @@ public class ClientHandler implements Runnable {
     private final ObjectOutputStream objectOutputStream;
 
     private User currentUser;
+    private Chat currentChat;
 
     public ClientHandler(Socket socket, Server server) {
         this.socket = socket;
@@ -38,7 +40,6 @@ public class ClientHandler implements Runnable {
             String currThreadName = Thread.currentThread().getName();
             String str;
             Thread senderThread = new Thread(new Sender(), "Sender"+currThreadName.substring(currThreadName.indexOf("-")));
-            System.out.println(senderThread.getName());
             senderThread.start();
             while (!Thread.currentThread().isInterrupted() && (str = reader.readLine()) != null) {
                 if (str.equals(RequestResponse.REGISTRATION.name())) {
@@ -55,6 +56,15 @@ public class ClientHandler implements Runnable {
                 } else if (str.equals(RequestResponse.UPDATE_CHAT.name())) {
                     currentUser.addChat(new Chat(reader.readLine()));
                     server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.UPDATE_CHAT, currentUser.getChatNames()));
+                } else if (str.equals(RequestResponse.SET_CURRENT_CHAT.name())) {
+                    currentChat = currentUser.getChat(reader.readLine());
+                } else if (str.equals(RequestResponse.GET_CHAT_MESSAGE.name())) {
+                    responses.add(new ServerResponse(RequestResponse.UPDATE_MESSAGES,
+                            new ArrayList<>(currentChat.getMessages())));
+                } else if (str.equals(RequestResponse.SEND_MESSAGE.name())) {
+                    currentChat.sendMessage(currentUser.getUsername() + ": " + reader.readLine());
+                    server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.UPDATE_MESSAGES,
+                            new ArrayList<>(currentChat.getMessages())));
                 } else if (str.equals(RequestResponse.EXIT.name())) {
                     System.out.println("Exit from system " + currThreadName);
                     responses.add(new ServerResponse(RequestResponse.EXIT, null));

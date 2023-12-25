@@ -4,22 +4,24 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.event.ActionEvent;
+import javafx.event.EventHandler;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
+import javafx.util.Callback;
 import main.RequestResponse;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.List;
@@ -37,6 +39,7 @@ public class UIClient extends Application {
     private GridPane registrationMenu;
     private GridPane logInMenu;
     private BorderPane chatsMenu;
+    private BorderPane chat;
 
     private String response;
     private final CyclicBarrier forListener = new CyclicBarrier(2);
@@ -59,7 +62,7 @@ public class UIClient extends Application {
 
     @Override
     public void start(Stage stage) {
-        mainMenu = initMainMenu();
+        initMainMenu();
 
         scene = new Scene(mainMenu);
         stage.setOnCloseRequest(e -> {
@@ -84,10 +87,10 @@ public class UIClient extends Application {
     }
 
     //создает главное меню с кнопкой для регистрации и входа
-    private VBox initMainMenu() {
-        VBox root = new VBox();
-        root.setAlignment(Pos.CENTER);
-        root.setSpacing(15);
+    private void initMainMenu() {
+        mainMenu = new VBox();
+        mainMenu.setAlignment(Pos.CENTER);
+        mainMenu.setSpacing(15);
 
         Label title = new Label("Chat");
         title.setFont(new Font(50));
@@ -96,26 +99,24 @@ public class UIClient extends Application {
         registrationButton.setPrefWidth(100);
         registrationButton.setOnAction(e -> {
             if (registrationMenu == null) {
-                registrationMenu = initRegLogMenu(true);
+                registrationMenu = createRegLogMenu(true);
             }
             scene.setRoot(registrationMenu);
         });
         Button logInButton = new Button("Log in");
         logInButton.setOnAction(e -> {
             if (logInMenu == null) {
-                logInMenu = initRegLogMenu(false);
+                logInMenu = createRegLogMenu(false);
             }
             scene.setRoot(logInMenu);
         });
         logInButton.setPrefWidth(100);
 
-        root.getChildren().addAll(title, registrationButton, logInButton);
-
-        return root;
+        mainMenu.getChildren().addAll(title, registrationButton, logInButton);
     }
 
     //создает меню входа или регистрации
-    private GridPane initRegLogMenu(boolean isRegistration) {
+    private GridPane createRegLogMenu(boolean isRegistration) {
         GridPane gridPane = new GridPane();
         gridPane.setAlignment(Pos.CENTER);
         gridPane.setHgap(30);
@@ -176,18 +177,16 @@ public class UIClient extends Application {
             } catch (InterruptedException | BrokenBarrierException ex) {
                 throw new RuntimeException(ex);
             }
-            if (response.equals(RequestResponse.SUCCESSFUL_REGISTRATION.name())){
-                if (logInMenu == null){
-                    logInMenu = initRegLogMenu(false);
+            if (response.equals(RequestResponse.SUCCESSFUL_REGISTRATION.name())) {
+                if (logInMenu == null) {
+                    logInMenu = createRegLogMenu(false);
                 }
                 //имитация входа в аккаунт
-                ((TextField)logInMenu.getChildren().get(1)).setText(usernameField.getText());
-                ((TextField)logInMenu.getChildren().get(4)).setText(passwordField.getText());
-                ((Button)((ButtonBar)logInMenu.getChildren().get(6)).getButtons().getFirst()).fire();
+                ((TextField) logInMenu.getChildren().get(1)).setText(usernameField.getText());
+                ((TextField) logInMenu.getChildren().get(4)).setText(passwordField.getText());
+                ((Button) ((ButtonBar) logInMenu.getChildren().get(6)).getButtons().getFirst()).fire();
             } else if (response.equals(RequestResponse.SUCCESSFUL_LOGIN.name())) {
-                if (chatsMenu == null){
-                    chatsMenu = initChatsMenu();
-                }
+                initChatsMenu();
                 scene.setRoot(chatsMenu);
             }
         });
@@ -216,10 +215,15 @@ public class UIClient extends Application {
     }
 
     //создает меню со списком чатов пользователя
-    private BorderPane initChatsMenu() {
-        BorderPane root = new BorderPane();
+    private void initChatsMenu() {
+        if (chatsMenu == null){
+            chatsMenu = new BorderPane();
+        }else {
+            return;
+        }
 
         ListView<String> chatNames = new ListView<>();
+        chatNames.setCellFactory(getChatNamesCellFactory());
         writer.println(RequestResponse.GET_CHAT_NAMES.name());
         writer.flush();
         chatNames.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
@@ -228,7 +232,68 @@ public class UIClient extends Application {
         Button createChat = new Button("+");
         createChat.setFont(new Font(15));
         createChat.setShape(new Circle(1));
-        createChat.setOnAction(e -> {
+        createChat.setOnAction(getCreateChatEvent(chatNames));
+        BorderPane.setAlignment(createChat, Pos.CENTER_RIGHT);
+        BorderPane.setMargin(createChat, new Insets(5));
+
+        chatsMenu.setTop(createChat);
+        chatsMenu.setCenter(chatNames);
+    }
+
+    private BorderPane createChat() {
+        BorderPane root = new BorderPane();
+
+        TextArea messages = new ListTextArea();
+        messages.setEditable(false);
+        messages.setWrapText(true);
+        root.setCenter(messages);
+
+        Button back = new Button("<-");
+        back.setOnAction(e -> scene.setRoot(chatsMenu));
+        BorderPane.setAlignment(back, Pos.CENTER_LEFT);
+        BorderPane.setMargin(back, new Insets(10));
+        root.setTop(back);
+
+        HBox sendBox = new HBox();
+        sendBox.setPadding(new Insets(10));
+        sendBox.setSpacing(5);
+
+        TextField message = new TextField();
+        message.setPrefColumnCount(messages.getPrefColumnCount());
+
+        Button sendButton = new Button("Send");
+        sendButton.setOnAction(e -> {
+            if (!message.getText().trim().isEmpty()) {
+                System.out.println("Send message");
+                writer.println(RequestResponse.SEND_MESSAGE.name());
+                writer.println(message.getText().trim());
+                writer.flush();
+                message.setText("");
+            }
+        });
+
+        sendBox.getChildren().addAll(message, sendButton);
+        root.setBottom(sendBox);
+
+        return root;
+    }
+
+    //возвращает окно с надписью о том что такой чат уже существует
+    private Stage getChatExistsStage() {
+        Stage errorStage = new Stage();
+        Label error = new Label("Chat already exists");
+        error.setFont(new Font(25));
+        error.setTextFill(Color.RED);
+        error.setStyle("-fx-font-weight: bold");
+        errorStage.setScene(new Scene(new StackPane(error)));
+        errorStage.setWidth(300);
+        errorStage.setHeight(200);
+        return errorStage;
+    }
+
+    //возвращает слушатель событий для кнопки "+" (создать чат)
+    private EventHandler<ActionEvent> getCreateChatEvent(ListView<String> chatNames) {
+        return e -> {
             Stage stage = new Stage();
 
             VBox box = new VBox();
@@ -242,9 +307,9 @@ public class UIClient extends Application {
             TextField titleField = new TextField();
             titleField.setTextFormatter(new TextFormatter<>(TextFormatter.IDENTITY_STRING_CONVERTER, "",
                     change -> {
-                        if (change.getControlNewText().trim().isEmpty()){
-                           okButton.setDisable(true);
-                           return change;
+                        if (change.getControlNewText().trim().isEmpty()) {
+                            okButton.setDisable(true);
+                            return change;
                         }
                         okButton.setDisable(false);
                         return change;
@@ -254,8 +319,13 @@ public class UIClient extends Application {
             titleBox.setSpacing(5);
 
             okButton.setOnAction(e2 -> {
+                if (chatNames.getItems().contains(titleField.getText().trim())) {
+                    getChatExistsStage().show();
+                    stage.close();
+                    return;
+                }
                 writer.println(RequestResponse.UPDATE_CHAT.name());
-                writer.println(titleField.getText());
+                writer.println(titleField.getText().trim());
                 writer.flush();
                 stage.close();
             });
@@ -268,32 +338,69 @@ public class UIClient extends Application {
             stage.setScene(new Scene(box));
             stage.centerOnScreen();
             stage.show();
-        });
-        BorderPane.setAlignment(createChat, Pos.CENTER_RIGHT);
-        BorderPane.setMargin(createChat, new Insets(5));
+        };
+    }
 
-        root.setTop(createChat);
-        root.setCenter(chatNames);
-        return root;
+    //настраивает отображение элементов ListCell<String> и добавляет слушателя событий
+    //для каждого элемента списка
+    private Callback<ListView<String>, ListCell<String>> getChatNamesCellFactory() {
+        return stringListView -> {
+            ListCell<String> listCell = new ListCell<>() {
+                @Override
+                protected void updateItem(String s, boolean empty) {
+                    super.updateItem(s, empty);
+                    if (s == null && empty) {
+                        setText("");
+                    } else {
+                        setText(s);
+                    }
+                }
+            };
+            listCell.setOnMouseClicked(e -> {
+                int index = listCell.getIndex();
+                if (index >= 0 && index < stringListView.getItems().size()) {
+                    System.out.println("Click from " + stringListView.getItems().get(index));
+                    writer.println(RequestResponse.SET_CURRENT_CHAT.name());
+                    writer.println(stringListView.getItems().get(index));
+                    writer.flush();
+                    chat = createChat();
+                    scene.setRoot(chat);
+                    writer.println(RequestResponse.GET_CHAT_MESSAGE);
+                    writer.flush();
+                }
+            });
+            return listCell;
+        };
+    }
+
+    //добавляет сообщение из коллекции в текущий чат
+    private void addMessages(List<String> messages) {
+        if (chat != null) {
+            ListTextArea textArea = (ListTextArea) chat.getCenter();
+            List<String> lines = textArea.getLines();
+            messages.subList(lines.size(), messages.size()).forEach(s -> textArea.appendText(s + "\n"));
+        }
     }
 
     //слушатель ответов от сервера
-    private class Listener implements Runnable{
+    private class Listener implements Runnable {
         @Override
         public void run() {
-            while (!Thread.currentThread().isInterrupted()){
+            while (!Thread.currentThread().isInterrupted()) {
                 try {
                     String serverResponse = objectInputStream.readUTF();
 
-                    if (serverResponse.equals(RequestResponse.UPDATE_CHAT.name()) || serverResponse.equals(RequestResponse.GET_CHAT_NAMES.name())){
-                        Object obj = objectInputStream.readObject();
-                        ObservableList<String> list = FXCollections.observableList((List<String>) obj);
-                        Platform.runLater(() -> ((ListView<String>)chatsMenu.getCenter()).setItems(list));
+                    if (serverResponse.equals(RequestResponse.UPDATE_CHAT.name()) || serverResponse.equals(RequestResponse.GET_CHAT_NAMES.name())) {
+                        ObservableList<String> list = FXCollections.observableList((List<String>) objectInputStream.readObject());
+                        Platform.runLater(() -> ((ListView<String>) chatsMenu.getCenter()).setItems(list));
+                    } else if (serverResponse.equals(RequestResponse.UPDATE_MESSAGES.name())) {
+                        ObservableList<String> list = FXCollections.observableList((List<String>) objectInputStream.readObject());
+                        Platform.runLater(() -> addMessages(list));
                     } else {
                         response = serverResponse;
                         forListener.await();
                     }
-                } catch (SocketException socketException){
+                } catch (SocketException socketException) {
                     break;
                 } catch (IOException | BrokenBarrierException | InterruptedException | ClassNotFoundException e) {
                     throw new RuntimeException(e);
