@@ -73,6 +73,11 @@ public class Server {
             return null;
         }
     }
+    public User getUser(String username){
+        synchronized (users) {
+            return users.get(username);
+        }
+    }
 
     //удаление нерабочего потока
     public void removeThisThread(Thread th){

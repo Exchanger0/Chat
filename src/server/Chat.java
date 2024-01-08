@@ -29,6 +29,18 @@ public class Chat {
         return name;
     }
 
+    public void addMember(User user){
+        synchronized (members) {
+            members.add(user);
+        }
+    }
+
+    public List<User> getMembers(){
+        synchronized (members) {
+            return members;
+        }
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

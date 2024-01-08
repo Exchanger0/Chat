@@ -53,9 +53,20 @@ public class ClientHandler implements Runnable {
                     System.out.println("End login " + currThreadName);
                 } else if (str.equals(RequestResponse.GET_CHAT_NAMES.name())) {
                     responses.add(new ServerResponse(RequestResponse.GET_CHAT_NAMES, currentUser.getChatNames()));
-                } else if (str.equals(RequestResponse.UPDATE_CHAT.name())) {
-                    currentUser.addChat(new Chat(reader.readLine()));
-                    server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.UPDATE_CHAT, currentUser.getChatNames()));
+                } else if (str.equals(RequestResponse.CREATE_CHAT.name())) {
+                    Chat chat = new Chat(reader.readLine());
+                    chat.addMember(currentUser);
+                    String[] memberNames = reader.readLine().split("\\Q$\\E");
+                    for (String memberName : memberNames){
+                        User user = server.getUser(memberName);
+                        if (user != null) {
+                            user.addChat(chat);
+                            server.notifyClientHandlers(user, new ServerResponse(RequestResponse.UPDATE_CHATS, user.getChatNames()));
+                            chat.addMember(user);
+                        }
+                    }
+                    currentUser.addChat(chat);
+                    server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.UPDATE_CHATS, currentUser.getChatNames()));
                 } else if (str.equals(RequestResponse.SET_CURRENT_CHAT.name())) {
                     currentChat = currentUser.getChat(reader.readLine());
                 } else if (str.equals(RequestResponse.GET_CHAT_MESSAGE.name())) {
@@ -63,8 +74,10 @@ public class ClientHandler implements Runnable {
                             new ArrayList<>(currentChat.getMessages())));
                 } else if (str.equals(RequestResponse.SEND_MESSAGE.name())) {
                     currentChat.sendMessage(currentUser.getUsername() + ": " + reader.readLine());
-                    server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.UPDATE_MESSAGES,
-                            new ArrayList<>(currentChat.getMessages())));
+                    for (User user : currentChat.getMembers()){
+                        server.notifyClientHandlers(user, new ServerResponse(RequestResponse.UPDATE_MESSAGES,
+                                new ArrayList<>(currentChat.getMessages())));
+                    }
                 } else if (str.equals(RequestResponse.EXIT.name())) {
                     System.out.println("Exit from system " + currThreadName);
                     responses.add(new ServerResponse(RequestResponse.EXIT, null));

@@ -9,6 +9,7 @@ import javafx.event.EventHandler;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
@@ -301,38 +302,50 @@ public class UIClient extends Application {
             box.setPadding(new Insets(10));
             box.setAlignment(Pos.CENTER);
 
-            Button okButton = new Button("OK");
-
             Label title = new Label("Title of chat: ");
             TextField titleField = new TextField();
-            titleField.setTextFormatter(new TextFormatter<>(TextFormatter.IDENTITY_STRING_CONVERTER, "",
-                    change -> {
-                        if (change.getControlNewText().trim().isEmpty()) {
-                            okButton.setDisable(true);
-                            return change;
-                        }
-                        okButton.setDisable(false);
-                        return change;
-                    }));
+
             HBox titleBox = new HBox(title, titleField);
             titleBox.setAlignment(Pos.CENTER);
             titleBox.setSpacing(5);
 
+            ScrollPane usernames = new ScrollPane();
+            usernames.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+            usernames.setFitToWidth(true);
+            VBox content = new VBox();
+            content.setSpacing(10);
+            content.setPadding(new Insets(15));
+            usernames.setContent(content);
+
+            Button addUserButton = new Button("Add User");
+            addUserButton.setOnAction(event -> ((VBox)usernames.getContent()).getChildren().add(new TextField()));
+
+            Button okButton = new Button("OK");
+            okButton.disableProperty().bind(titleField.textProperty().isEmpty());
             okButton.setOnAction(e2 -> {
                 if (chatNames.getItems().contains(titleField.getText().trim())) {
                     getChatExistsStage().show();
                     stage.close();
                     return;
                 }
-                writer.println(RequestResponse.UPDATE_CHAT.name());
+                writer.println(RequestResponse.CREATE_CHAT.name());
                 writer.println(titleField.getText().trim());
+                StringBuilder names = new StringBuilder();
+                ObservableList<Node> nodes = ((VBox) usernames.getContent()).getChildren();
+                for (int i = 0; i < nodes.size(); i++) {
+                    names.append(((TextField)nodes.get(i)).getText().trim());
+                    if (i != nodes.size()-1){
+                        names.append("$");
+                    }
+                }
+                writer.println(names);
                 writer.flush();
                 stage.close();
             });
 
-            box.getChildren().addAll(titleBox, okButton);
+            box.getChildren().addAll(titleBox,usernames, addUserButton, okButton);
             stage.setWidth(300);
-            stage.setHeight(120);
+            stage.setHeight(300);
             stage.setResizable(false);
             stage.setAlwaysOnTop(true);
             stage.setScene(new Scene(box));
@@ -390,7 +403,7 @@ public class UIClient extends Application {
                 try {
                     String serverResponse = objectInputStream.readUTF();
 
-                    if (serverResponse.equals(RequestResponse.UPDATE_CHAT.name()) || serverResponse.equals(RequestResponse.GET_CHAT_NAMES.name())) {
+                    if (serverResponse.equals(RequestResponse.UPDATE_CHATS.name()) || serverResponse.equals(RequestResponse.GET_CHAT_NAMES.name())) {
                         ObservableList<String> list = FXCollections.observableList((List<String>) objectInputStream.readObject());
                         Platform.runLater(() -> ((ListView<String>) chatsMenu.getCenter()).setItems(list));
                     } else if (serverResponse.equals(RequestResponse.UPDATE_MESSAGES.name())) {
