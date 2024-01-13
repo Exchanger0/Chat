@@ -241,7 +241,7 @@ public class UIClient extends Application {
         chatsMenu.setCenter(chatNames);
     }
 
-    private BorderPane createChat() {
+    private BorderPane createChat(String chatName, Pane mainRoot) {
         BorderPane root = new BorderPane();
 
         TextArea messages = new ListTextArea();
@@ -249,15 +249,51 @@ public class UIClient extends Application {
         messages.setWrapText(true);
         root.setCenter(messages);
 
+        GridPane topPane = new GridPane();
+        ColumnConstraints con1 = new ColumnConstraints();
+        con1.setHgrow(Priority.SOMETIMES);
+        con1.setFillWidth(true);
+        topPane.getColumnConstraints().addAll(con1, con1);
+        topPane.setPadding(new Insets(10));
+
         Button back = new Button("<-");
         back.setOnAction(e -> scene.setRoot(chatsMenu));
-        BorderPane.setAlignment(back, Pos.CENTER_LEFT);
-        BorderPane.setMargin(back, new Insets(10));
-        root.setTop(back);
+        topPane.add(back, 0,0);
+
+        Label chatNameLabel = new Label(chatName);
+        chatNameLabel.setFont(new Font(15));
+        chatNameLabel.setOnMouseClicked(e -> {
+            if (mainRoot.getChildren().size() < 2) {
+                VBox box = new VBox();
+
+                Label membersLabel = new Label("Members");
+                membersLabel.setFont(new Font(15));
+
+                Button closeButton = new Button("✕");
+                closeButton.setFont(new Font(10));
+                closeButton.setOnAction(actionEvent -> mainRoot.getChildren().removeLast());
+
+                HBox topBox = new HBox(membersLabel, closeButton);
+                topBox.setSpacing(20);
+                VBox.setMargin(topBox, new Insets(12, 10,12,10));
+
+                ListView<String> membersName = new ListView<>((ObservableList<String>) this.chat.getUserData());
+                membersName.setSelectionModel(null);
+                membersName.setFocusModel(null);
+
+                box.getChildren().addAll(topBox,membersName);
+                box.setMinSize(100, 200);
+                mainRoot.getChildren().add(box);
+            }
+        });
+        topPane.add(chatNameLabel, 1,0);
+
+        root.setTop(topPane);
 
         HBox sendBox = new HBox();
         sendBox.setPadding(new Insets(10));
         sendBox.setSpacing(5);
+        sendBox.setAlignment(Pos.CENTER);
 
         TextField message = new TextField();
         message.setPrefColumnCount(messages.getPrefColumnCount());
@@ -369,6 +405,7 @@ public class UIClient extends Application {
                     }
                 }
             };
+            listCell.setFont(new Font(20));
             listCell.setOnMouseClicked(e -> {
                 int index = listCell.getIndex();
                 if (index >= 0 && index < stringListView.getItems().size()) {
@@ -376,9 +413,16 @@ public class UIClient extends Application {
                     writer.println(RequestResponse.SET_CURRENT_CHAT.name());
                     writer.println(stringListView.getItems().get(index));
                     writer.flush();
-                    chat = createChat();
-                    scene.setRoot(chat);
-                    writer.println(RequestResponse.GET_CHAT_MESSAGE);
+
+                    HBox root = new HBox();
+                    chat = createChat(stringListView.getItems().get(index), root);
+                    HBox.setHgrow(chat, Priority.SOMETIMES);
+                    root.getChildren().add(chat);
+                    System.out.println(root.getChildren());
+                    scene.setRoot(root);
+
+                    writer.println(RequestResponse.GET_CHAT_MESSAGE.name());
+                    writer.println(RequestResponse.GET_MEMBERS_NAME.name());
                     writer.flush();
                 }
             });
@@ -409,6 +453,8 @@ public class UIClient extends Application {
                     } else if (serverResponse.equals(RequestResponse.UPDATE_MESSAGES.name())) {
                         ObservableList<String> list = FXCollections.observableList((List<String>) objectInputStream.readObject());
                         Platform.runLater(() -> addMessages(list));
+                    } else if (serverResponse.equals(RequestResponse.MEMBERS_NAME.name())) {
+                        chat.setUserData(FXCollections.observableList(((List<String>) objectInputStream.readObject())));
                     } else {
                         response = serverResponse;
                         forListener.await();

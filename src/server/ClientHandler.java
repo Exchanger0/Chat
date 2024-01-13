@@ -11,6 +11,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.stream.Collectors;
 
 public class ClientHandler implements Runnable {
     private final Socket socket;
@@ -78,6 +79,9 @@ public class ClientHandler implements Runnable {
                         server.notifyClientHandlers(user, new ServerResponse(RequestResponse.UPDATE_MESSAGES,
                                 new ArrayList<>(currentChat.getMessages())));
                     }
+                } else if (str.equals(RequestResponse.GET_MEMBERS_NAME.name())) {
+                    responses.add(new ServerResponse(RequestResponse.MEMBERS_NAME,
+                            currentChat.getMembers().stream().map(User::getUsername).collect(Collectors.toList())));
                 } else if (str.equals(RequestResponse.EXIT.name())) {
                     System.out.println("Exit from system " + currThreadName);
                     responses.add(new ServerResponse(RequestResponse.EXIT, null));
