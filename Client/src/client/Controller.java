@@ -133,4 +133,8 @@ public class Controller implements Runnable{
             throw new RuntimeException(e);
         }
     }
+
+    public Chat getCurrentChat() {
+        return currentChat;
+    }
 }
