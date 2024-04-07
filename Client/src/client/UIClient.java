@@ -1,9 +1,6 @@
 package client;
 
-import client.elements.ChatMenu;
-import client.elements.ChatUI;
-import client.elements.MainMenu;
-import client.elements.RegLogMenu;
+import client.elements.*;
 import javafx.application.Application;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -21,12 +18,14 @@ import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import javafx.util.Callback;
 import main.Chat;
+import main.User;
 
 import java.io.IOException;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 
+//todo: исправить баги с множеством одного человека в друзьях и запросах
 public class UIClient extends Application {
 
     private Stage primaryStage;
@@ -38,6 +37,8 @@ public class UIClient extends Application {
     private RegLogMenu logInMenu;
     private ChatMenu chatMenu;
     private ChatUI chat;
+    private FriendMenu friendMenu;
+    private final CTabPane cTabPane = new CTabPane();
 
     private Controller controller;
     private Thread listenerThread;
@@ -118,16 +119,26 @@ public class UIClient extends Application {
                 chatMenu = new ChatMenu(FXCollections.observableList(controller.getChats()));
                 chatMenu.setListCellFactory(getChatNamesCellFactory());
                 chatMenu.setCreateChatAction(getCreateChatEvent(chatMenu.getChats()));
-                scene.setRoot(chatMenu);
+
+                friendMenu = new FriendMenu(controller.getFriends(), controller.getFRequestsForUser(), controller.getFRequestsFromUser());
+                friendMenu.setFriendsCellFactory(getFriendCellFactory());
+                friendMenu.setFRForUserCellFactory(getFRForUserCellFactory());
+                friendMenu.setFRFromUserCellFactory(getFRFromUserCellFactory());
+                friendMenu.setSendRequestAction(e1 -> {
+                    controller.sendFriendRequest(friendMenu.getUsernameField().getText());
+                    friendMenu.getUsernameField().setText("");
+                });
+                cTabPane.addTab("Chats", chatMenu);
+                cTabPane.addTab("Friends", friendMenu);
+                scene.setRoot(cTabPane);
+                primaryStage.setTitle(primaryStage.getTitle() + "(" + regLogMenu.getUsernameField().getText() + "");
             }
         });
 
         regLogMenu.setBackButtonAction(e -> {
-            System.out.println("start back");
             regLogMenu.getUsernameField().setText("");
             regLogMenu.getPasswordField().setText("");
             scene.setRoot(mainMenu);
-            System.out.println("end back");
         });
     }
 
@@ -158,6 +169,7 @@ public class UIClient extends Application {
             ScrollPane usernames = new ScrollPane();
             usernames.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
             usernames.setFitToWidth(true);
+            usernames.setMinViewportHeight(100);
             VBox content = new VBox();
             content.setSpacing(10);
             content.setPadding(new Insets(15));
@@ -187,7 +199,17 @@ public class UIClient extends Application {
                 dialog.close();
             });
 
-            box.getChildren().addAll(titleBox,usernames, addUserButton, okButton);
+            Button cancleButton = new Button("Cancel");
+            cancleButton.setOnAction(e2 -> {
+                dialog.setResult(true);
+                dialog.close();
+            });
+
+            HBox buttonBox = new HBox(okButton, cancleButton);
+            buttonBox.setAlignment(Pos.CENTER_RIGHT);
+            buttonBox.setSpacing(5);
+
+            box.getChildren().addAll(titleBox,usernames, addUserButton, buttonBox);
             dialog.setWidth(300);
             dialog.setHeight(300);
             dialog.setResizable(false);
@@ -238,10 +260,94 @@ public class UIClient extends Application {
         };
     }
 
+    private Callback<ListView<User>, ListCell<User>> getFriendCellFactory() {
+        return new Callback<>() {
+            @Override
+            public ListCell<User> call(ListView<User> userListView) {
+                ListCell<User> listCell = new ListCell<>() {
+                    @Override
+                    protected void updateItem(User user, boolean empty) {
+                        super.updateItem(user, empty);
+                        if (user == null && empty) {
+                            setText("");
+                        } else {
+                            setText(user.getUsername());
+                        }
+                    }
+                };
+
+                MenuItem delete = new MenuItem("Delete");
+                delete.setOnAction(e -> {
+                    controller.deleteFriend(listCell.getItem());
+                });
+                listCell.setContextMenu(new ContextMenu(delete));
+                return listCell;
+            }
+        };
+    }
+
+    private Callback<ListView<User>, ListCell<User>> getFRForUserCellFactory() {
+        return new Callback<>() {
+            @Override
+            public ListCell<User> call(ListView<User> userListView) {
+                ListCell<User> listCell = new ListCell<>() {
+                    @Override
+                    protected void updateItem(User user, boolean empty) {
+                        super.updateItem(user, empty);
+                        if (user == null && empty) {
+                            setText("");
+                        } else {
+                            setText(user.getUsername());
+                        }
+                    }
+                };
+
+                MenuItem disagree = new MenuItem("Disagree");
+                disagree.setOnAction(e -> {
+                    controller.removeFRForUser(listCell.getItem());
+                });
+
+                MenuItem agree = new MenuItem("Agree");
+                agree.setOnAction(e -> {
+                    controller.addFriend(listCell.getItem());
+                });
+                listCell.setContextMenu(new ContextMenu(disagree, agree));
+                return listCell;
+            }
+        };
+    }
+
+    private Callback<ListView<User>, ListCell<User>> getFRFromUserCellFactory() {
+        return new Callback<>() {
+            @Override
+            public ListCell<User> call(ListView<User> userListView) {
+                ListCell<User> listCell = new ListCell<>() {
+                    @Override
+                    protected void updateItem(User user, boolean empty) {
+                        super.updateItem(user, empty);
+                        if (user == null && empty) {
+                            setText("");
+                        } else {
+                            setText(user.getUsername());
+                        }
+                    }
+                };
+
+                MenuItem cancellation = new MenuItem("Cancellation");
+                cancellation.setOnAction(e -> {
+                    controller.removeFRFromUser(listCell.getItem());
+                });
+                
+                listCell.setContextMenu(new ContextMenu(cancellation));
+                return listCell;
+            }
+        };
+    }
+
     public HBox createChat() {
         HBox root = new HBox();
         chat = new ChatUI(controller.getCurrentChat(), root);
-        chat.setBackButtonAction(e1 -> scene.setRoot(chatMenu));
+        chat.setBackButtonAction(e1 -> scene.setRoot(cTabPane));
         chat.setSendButtonAction(e1 -> {
             if (!chat.getMessage().getText().trim().isEmpty()) {
                 controller.sendMessage(chat.getMessage().getText().trim());
@@ -263,4 +369,27 @@ public class UIClient extends Application {
         chatMenu.addChat(chat);
     }
 
+    public void deleteFriend(User friend){
+        friendMenu.deleteFriend(friend);
+    }
+
+    public void addFriend(User friend){
+        friendMenu.addFriend(friend);
+    }
+
+    public void removeFRForUser(User user){
+        friendMenu.removeFRForUser(user);
+    }
+
+    public void removeFRFromUser(User user){
+        friendMenu.removeFRFromUser(user);
+    }
+
+    public void addFRForUser(User user){
+        friendMenu.addFRForUser(user);
+    }
+
+    public void addFRFromUser(User user){
+        friendMenu.addFRFromUser(user);
+    }
 }

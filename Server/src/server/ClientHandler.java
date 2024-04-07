@@ -81,6 +81,45 @@ public class ClientHandler implements Runnable {
                                 List.of(currentChat.getName(), currentUser.getUsername() + ": " + message)));
                     }
                     System.out.println("Current chat: " + currentChat);
+                } else if (str.equals(RequestResponse.DELETE_FRIEND.name())) {
+                    User deleteFriend = server.getUser(reader.readUTF());
+                    if (currentUser.deleteFriend(deleteFriend) && deleteFriend.deleteFriend(currentUser)) {
+                        server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.DELETE_FRIEND, deleteFriend));
+                        server.notifyClientHandlers(deleteFriend, new ServerResponse(RequestResponse.DELETE_FRIEND, currentUser));
+                    }
+
+                } else if (str.equals(RequestResponse.ADD_FRIEND.name())) {
+                    User newFriend = server.getUser(reader.readUTF());
+                    if (currentUser.addFriend(newFriend) && newFriend.addFriend(currentUser)
+                       && currentUser.deleteFRequestForUser(newFriend) && newFriend.deleteFRequestFromUser(currentUser)){
+                        server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.REMOVE_FR_FOR_USER, newFriend));
+                        server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.ADD_FRIEND, newFriend));
+                        server.notifyClientHandlers(newFriend, new ServerResponse(RequestResponse.REMOVE_FR_FROM_USER, currentUser));
+                        server.notifyClientHandlers(newFriend, new ServerResponse(RequestResponse.ADD_FRIEND, currentUser));
+                    }
+                } else if (str.equals(RequestResponse.REMOVE_FR_FOR_USER.name())) {
+                    User user = server.getUser(reader.readUTF());
+                    if (currentUser.deleteFRequestForUser(user) && user.deleteFRequestFromUser(currentUser)) {
+                        server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.REMOVE_FR_FOR_USER, user));
+                        server.notifyClientHandlers(user, new ServerResponse(RequestResponse.REMOVE_FR_FROM_USER, currentUser));
+                    }
+
+                } else if (str.equals(RequestResponse.REMOVE_FR_FROM_USER.name())) {
+                    User user = server.getUser(reader.readUTF());
+                    if (currentUser.deleteFRequestFromUser(user) && user.deleteFRequestForUser(currentUser)) {
+                        server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.REMOVE_FR_FROM_USER, user));
+                        server.notifyClientHandlers(user, new ServerResponse(RequestResponse.REMOVE_FR_FOR_USER, currentUser));
+                    }
+
+                } else if (str.equals(RequestResponse.SEND_FRIEND_REQUEST.name())) {
+                    String username = reader.readUTF();
+                    User user = server.getUser(username);
+                    if (user != null){
+                        if (currentUser.addFRequestFromUser(user) && user.addFRequestForUser(currentUser)){
+                            server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.ADD_FR_FROM_USER, user));
+                            server.notifyClientHandlers(user, new ServerResponse(RequestResponse.ADD_FR_FOR_USER, currentUser));
+                        }
+                    }
                 } else if (str.equals(RequestResponse.EXIT.name())) {
                     System.out.println("Exit from system " + currThreadName);
                     responses.add(new ServerResponse(RequestResponse.EXIT, null));
