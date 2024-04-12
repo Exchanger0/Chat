@@ -2,17 +2,16 @@ package client;
 
 import client.elements.*;
 import javafx.application.Application;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.CheckBoxListCell;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
@@ -25,7 +24,6 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 
-//todo: исправить баги с множеством одного человека в друзьях и запросах
 public class UIClient extends Application {
 
     private Stage primaryStage;
@@ -33,8 +31,8 @@ public class UIClient extends Application {
     private Socket socket;
 
     private final MainMenu mainMenu = new MainMenu();
-    private RegLogMenu registrationMenu;
-    private RegLogMenu logInMenu;
+    private final RegLogMenu registrationMenu = new RegLogMenu("Registration");
+    private final RegLogMenu logInMenu = new RegLogMenu("Log In");
     private ChatMenu chatMenu;
     private ChatUI chat;
     private FriendMenu friendMenu;
@@ -44,7 +42,6 @@ public class UIClient extends Application {
     private Thread listenerThread;
 
     public static void main(String[] args) {
-        System.out.println("start");
         launch(args);
     }
 
@@ -63,7 +60,8 @@ public class UIClient extends Application {
     @Override
     public void start(Stage stage) {
         primaryStage = stage;
-        System.out.println("Start");
+        initLogInEvent();
+        initRegEvent();
         initMainMenuButtonActions();
 
         scene = new Scene(mainMenu);
@@ -83,37 +81,36 @@ public class UIClient extends Application {
         stage.setWidth(600);
         stage.centerOnScreen();
         stage.show();
-        System.out.println("Show");
     }
 
     private void initMainMenuButtonActions() {
-
         mainMenu.setRegButtonAction(e -> {
-            if (registrationMenu == null) {
-                registrationMenu = new RegLogMenu();
-                initRegLogEvent(true, registrationMenu);
-            }
+            registrationMenu.cleanErrorLabels();
             scene.setRoot(registrationMenu);
         });
         mainMenu.setLogInButtonAction(e -> {
-            if (logInMenu == null) {
-                logInMenu = new RegLogMenu();
-                initRegLogEvent(false, logInMenu);
-            }
+            logInMenu.cleanErrorLabels();
             scene.setRoot(logInMenu);
         });
     }
 
-    private void initRegLogEvent(boolean isRegistration, RegLogMenu regLogMenu){
-        regLogMenu.setSendButtonAction(e -> {
-            if (isRegistration) {
-                System.out.println("Start reg");
-                controller.registration(regLogMenu.getUsernameField().getText(),
-                        regLogMenu.getPasswordField().getText());
-                System.out.println("End reg");
+    private void initRegEvent(){
+        registrationMenu.setSendButtonAction(e -> {
+            boolean res = controller.registration(registrationMenu.getUsernameField().getText(),
+                    registrationMenu.getPasswordField().getText());
+            if (res){
+                logInMenu.send(registrationMenu.getUsernameField().getText(), registrationMenu.getPasswordField().getText());
+            }else {
+                registrationMenu.setError("User with this name already exists");
             }
-            boolean result = controller.login(regLogMenu.getUsernameField().getText(),
-                    regLogMenu.getPasswordField().getText());
+        });
+        initBackButtonEvent(registrationMenu);
+    }
+
+    private void initLogInEvent(){
+        logInMenu.setSendButtonAction(e -> {
+            boolean result = controller.login(logInMenu.getUsernameField().getText(),
+                    logInMenu.getPasswordField().getText());
 
             if (result){
                 chatMenu = new ChatMenu(FXCollections.observableList(controller.getChats()));
@@ -131,10 +128,15 @@ public class UIClient extends Application {
                 cTabPane.addTab("Chats", chatMenu);
                 cTabPane.addTab("Friends", friendMenu);
                 scene.setRoot(cTabPane);
-                primaryStage.setTitle(primaryStage.getTitle() + "(" + regLogMenu.getUsernameField().getText() + "");
+                primaryStage.setTitle(primaryStage.getTitle() + "(" + logInMenu.getUsernameField().getText() + ")");
+            }else {
+                logInMenu.setError("Invalid name and/or password");
             }
         });
+        initBackButtonEvent(logInMenu);
+    }
 
+    private void initBackButtonEvent(RegLogMenu regLogMenu){
         regLogMenu.setBackButtonAction(e -> {
             regLogMenu.getUsernameField().setText("");
             regLogMenu.getPasswordField().setText("");
@@ -156,7 +158,7 @@ public class UIClient extends Application {
             DialogPane dialogPane = dialog.getDialogPane();
             VBox box = new VBox();
             box.setSpacing(10);
-            box.setPadding(new Insets(10));
+            box.setPadding(new Insets(5));
             box.setAlignment(Pos.CENTER);
 
             Label title = new Label("Title of chat: ");
@@ -166,17 +168,26 @@ public class UIClient extends Application {
             titleBox.setAlignment(Pos.CENTER);
             titleBox.setSpacing(5);
 
-            ScrollPane usernames = new ScrollPane();
-            usernames.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-            usernames.setFitToWidth(true);
-            usernames.setMinViewportHeight(100);
-            VBox content = new VBox();
-            content.setSpacing(10);
-            content.setPadding(new Insets(15));
-            usernames.setContent(content);
+            ScrollPane scrollPane = new ScrollPane();
+            scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+            scrollPane.setFitToWidth(true);
+            scrollPane.setMaxHeight(100);
 
-            Button addUserButton = new Button("Add User");
-            addUserButton.setOnAction(event -> ((VBox)usernames.getContent()).getChildren().add(new TextField()));
+            List<String> selectedUsers = new ArrayList<>();
+            ListView<String> friends = new ListView<>(
+                    FXCollections.observableList(controller.getFriends().stream().map(User::getUsername).toList()));
+            friends.setCellFactory(CheckBoxListCell.forListView(s -> {
+                SimpleBooleanProperty pr = new SimpleBooleanProperty(false);
+                pr.addListener((observable, oldVal, newVal) -> {
+                    if (newVal){
+                        selectedUsers.add(s);
+                    }else {
+                        selectedUsers.remove(s);
+                    }
+                });
+                return pr;
+            }));
+            scrollPane.setContent(friends);
 
             Button okButton = new Button("OK");
             okButton.disableProperty().bind(titleField.textProperty().isEmpty());
@@ -189,12 +200,7 @@ public class UIClient extends Application {
                     return;
                 }
 
-                ObservableList<Node> nodes = ((VBox) usernames.getContent()).getChildren();
-                List<String> users = new ArrayList<>();
-                for (int i = 0; i < nodes.size(); i++) {
-                    users.add(((TextField)nodes.get(i)).getText().trim());
-                }
-                controller.createChat(titleField.getText().trim(),users);
+                controller.createChat(titleField.getText().trim(), selectedUsers);
                 dialog.setResult(true);
                 dialog.close();
             });
@@ -209,7 +215,7 @@ public class UIClient extends Application {
             buttonBox.setAlignment(Pos.CENTER_RIGHT);
             buttonBox.setSpacing(5);
 
-            box.getChildren().addAll(titleBox,usernames, addUserButton, buttonBox);
+            box.getChildren().addAll(titleBox,scrollPane, buttonBox);
             dialog.setWidth(300);
             dialog.setHeight(300);
             dialog.setResizable(false);
@@ -241,16 +247,14 @@ public class UIClient extends Application {
                 listCell.setOnMouseClicked(e -> {
                     int index = listCell.getIndex();
                     if (index >= 0 && index < chatListView.getItems().size()) {
-                        System.out.println("Click from " + chatListView.getItems().get(index));
-
                         controller.setCurrentChat(chatListView.getItems().get(index));
 
-                        scene.setRoot(createChat());
+                        chat = new ChatUI(controller.getCurrentChat());
+                        initChatActions();
+                        scene.setRoot(chat);
 
-                        TextArea textArea = (TextArea) chat.getCenter();
-                        System.out.println(controller.getMessages());
                         for (String s : controller.getMessages()){
-                            textArea.appendText(s + "\n");
+                            chat.addMessage(s);
                         }
                     }
                 });
@@ -344,9 +348,7 @@ public class UIClient extends Application {
         };
     }
 
-    public HBox createChat() {
-        HBox root = new HBox();
-        chat = new ChatUI(controller.getCurrentChat(), root);
+    public void initChatActions() {
         chat.setBackButtonAction(e1 -> scene.setRoot(cTabPane));
         chat.setSendButtonAction(e1 -> {
             if (!chat.getMessage().getText().trim().isEmpty()) {
@@ -354,9 +356,6 @@ public class UIClient extends Application {
                 chat.getMessage().setText("");
             }
         });
-        HBox.setHgrow(chat, Priority.SOMETIMES);
-        root.getChildren().add(chat);
-        return root;
     }
 
     public void addMessage(String message) {

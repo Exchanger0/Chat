@@ -6,17 +6,16 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Server {
     //список пользователей
-    private final HashMap<String, User> users = new HashMap<>();
+    private final ConcurrentHashMap<String, User> users = new ConcurrentHashMap<>();
     //список созданных потоков
     private final ConcurrentHashMap<String,Thread> threads = new ConcurrentHashMap<>();
     private boolean isStop = false;
     //сеансы всех клиентов одного пользователя
-    private final HashMap<User, ArrayList<ClientHandler>> userSessions = new HashMap<>();
+    private final ConcurrentHashMap<User, ArrayList<ClientHandler>> userSessions = new ConcurrentHashMap<>();
 
     private Server() {
     }
@@ -57,28 +56,24 @@ public class Server {
     }
 
     //добавляем пользователя
-    public void addUser(User user){
-        synchronized (users) {
-            users.put(user.getUsername(), user);
-        }
+    public boolean addUser(User user) {
+        User res = users.putIfAbsent(user.getUsername(), user);
+        return res == null;
     }
 
-    public User getUser(String username, String password){
-        synchronized (users) {
-            User u = users.get(username);
-            if (u == null){
-                return null;
-            }
-            if (u.equalsPassword(password)){
-                return u;
-            }
+    public User getUser(String username, String password) {
+        User u = users.get(username);
+        if (u == null) {
             return null;
         }
-    }
-    public User getUser(String username){
-        synchronized (users) {
-            return users.get(username);
+        if (u.equalsPassword(password)) {
+            return u;
         }
+        return null;
+    }
+
+    public User getUser(String username) {
+        return users.get(username);
     }
 
     //удаление нерабочего потока
@@ -87,32 +82,28 @@ public class Server {
     }
 
     //уведомление всех клиентов одного пользователя
-    public void notifyClientHandlers(User user, ServerResponse notification){
-        synchronized (userSessions) {
-            for (ClientHandler handler : userSessions.get(user)) {
-                handler.addServerResponse(notification);
-            }
+    public void notifyClientHandlers(User user, ServerResponse notification) {
+        for (ClientHandler handler : userSessions.get(user)) {
+            handler.addServerResponse(notification);
         }
     }
 
     //добавление клиента к текущей сессии
-    public void addClientHandler(User user, ClientHandler clientHandler){
-        synchronized (userSessions){
-            if (userSessions.containsKey(user)){
-                userSessions.get(user).add(clientHandler);
-            }else {
-                userSessions.put(user, new ArrayList<>(){{add(clientHandler);}});
-            }
+    public void addClientHandler(User user, ClientHandler clientHandler) {
+        if (userSessions.containsKey(user)) {
+            userSessions.get(user).add(clientHandler);
+        } else {
+            userSessions.put(user, new ArrayList<>() {{
+                add(clientHandler);
+            }});
         }
     }
 
     //удаление клиента из текущей сессии
-    public void deleteClientHandler(User user, ClientHandler handler){
+    public void deleteClientHandler(User user, ClientHandler handler) {
         if (user == null)
             return;
-        synchronized (userSessions){
-            userSessions.get(user).remove(handler);
-        }
+        userSessions.get(user).remove(handler);
     }
 
 }

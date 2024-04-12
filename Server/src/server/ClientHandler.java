@@ -50,7 +50,6 @@ public class ClientHandler implements Runnable {
                 if (str.equals(RequestResponse.REGISTRATION.name())) {
                     System.out.println("Start registration " + currThreadName);
                     registration();
-                    responses.add(new ServerResponse(RequestResponse.SUCCESSFUL_REGISTRATION, null));
                     System.out.println("End registration " + currThreadName);
                 } else if (str.equals(RequestResponse.LOG_IN.name())) {
                     System.out.println("Start login " + currThreadName);
@@ -76,11 +75,9 @@ public class ClientHandler implements Runnable {
                     String message = reader.readUTF();
                     currentChat.sendMessage(currentUser.getUsername() + ": " + message);
                     for (User user : currentChat.getMembers()){
-                        System.out.println(user);
                         server.notifyClientHandlers(user, new ServerResponse(RequestResponse.UPDATE_MESSAGES,
                                 List.of(currentChat.getName(), currentUser.getUsername() + ": " + message)));
                     }
-                    System.out.println("Current chat: " + currentChat);
                 } else if (str.equals(RequestResponse.DELETE_FRIEND.name())) {
                     User deleteFriend = server.getUser(reader.readUTF());
                     if (currentUser.deleteFriend(deleteFriend) && deleteFriend.deleteFriend(currentUser)) {
@@ -142,7 +139,12 @@ public class ClientHandler implements Runnable {
             String password = reader.readUTF();
 
             User user = new User(username, getHash(password));
-            server.addUser(user);
+            boolean res = server.addUser(user);
+            if (res){
+                responses.add(new ServerResponse(RequestResponse.SUCCESSFUL_REGISTRATION, null));
+            }else {
+                responses.add(new ServerResponse(RequestResponse.REGISTRATION_ERROR, null));
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

@@ -9,10 +9,8 @@ import java.io.*;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
-import java.util.stream.Collectors;
 
 public class Controller implements Runnable{
     private final UIClient client;
@@ -21,6 +19,7 @@ public class Controller implements Runnable{
     private User user;
     private Chat currentChat;
     private final CyclicBarrier waitResponse = new CyclicBarrier(2);
+    private boolean registrationRes = false;
 
 
     public Controller(UIClient client, Socket socket) throws IOException {
@@ -38,6 +37,14 @@ public class Controller implements Runnable{
                 if (serverResponse.equals(RequestResponse.SUCCESSFUL_LOGIN.name())){
                     user = (User) reader.readObject();
                     waitResponse.await();
+                } else if (serverResponse.equals(RequestResponse.LOGIN_ERROR.name())) {
+                    waitResponse.await();
+                } else if (serverResponse.equals(RequestResponse.SUCCESSFUL_REGISTRATION.name())) {
+                    registrationRes = true;
+                    waitResponse.await();
+                } else if (serverResponse.equals(RequestResponse.REGISTRATION_ERROR.name())) {
+                    registrationRes = false;
+                    waitResponse.await();
                 } else if (serverResponse.equals(RequestResponse.UPDATE_CHATS.name())) {
                     Chat newChat = (Chat) reader.readObject();
                     user.addChat(newChat);
@@ -45,7 +52,9 @@ public class Controller implements Runnable{
                 } else if (serverResponse.equals(RequestResponse.UPDATE_MESSAGES.name())) {
                     List<String> data = (List<String>) reader.readObject();
                     user.getChat(data.getFirst()).sendMessage(data.get(1));
-                    Platform.runLater(() -> client.addMessage(data.get(1)));
+                    if (currentChat.getName().equals(data.get(0))) {
+                        Platform.runLater(() -> client.addMessage(data.get(1)));
+                    }
                 } else if (serverResponse.equals(RequestResponse.DELETE_FRIEND.name())) {
                     User deleteFriend = (User) reader.readObject();
                     user.getFriends().remove(deleteFriend);
@@ -57,12 +66,10 @@ public class Controller implements Runnable{
                 } else if (serverResponse.equals(RequestResponse.REMOVE_FR_FOR_USER.name())) {
                     User user1 = (User) reader.readObject();
                     user.getFRequestsForUser().remove(user1);
-                    System.out.println("Controller: remove fr for user");
                     Platform.runLater(() -> client.removeFRForUser(user1));
                 } else if (serverResponse.equals(RequestResponse.REMOVE_FR_FROM_USER.name())) {
                     User user1 = (User) reader.readObject();
                     user.getFRequestsFromUser().remove(user1);
-                    System.out.println("Controller: remove fr from user");
                     Platform.runLater(() -> client.removeFRFromUser(user1));
                 } else if (serverResponse.equals(RequestResponse.ADD_FR_FOR_USER.name())) {
                     User user1 = (User) reader.readObject();
@@ -92,13 +99,15 @@ public class Controller implements Runnable{
         }
     }
 
-    public void registration(String username, String password){
+    public boolean registration(String username, String password){
         try {
             writer.writeUTF(RequestResponse.REGISTRATION.name());
             writer.writeUTF(username);
             writer.writeUTF(password);
             writer.flush();
-        } catch (IOException e) {
+            waitResponse.await();
+            return registrationRes;
+        } catch (IOException | InterruptedException | BrokenBarrierException e) {
             throw new RuntimeException(e);
         }
     }
@@ -134,10 +143,6 @@ public class Controller implements Runnable{
 
     public List<String> getMessages(){
         return currentChat.getMessages();
-    }
-
-    public List<String> getMembersName(){
-        return currentChat.getMembers().stream().map(User::getUsername).collect(Collectors.toList());
     }
 
     public void createChat(String title, List<String> users){
