@@ -10,8 +10,9 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
-import main.Chat;
 import main.User;
+
+import java.util.List;
 
 public class ChatUI extends HBox {
     private final VBox members = new VBox();
@@ -19,7 +20,7 @@ public class ChatUI extends HBox {
     private final Button sendButton;
     private final TextField message;
     private final TextArea messages;
-    public ChatUI(Chat chat) {
+    public ChatUI(String name, List<User> membersList) {
         messages = new TextArea();
         messages.setEditable(false);
         messages.setWrapText(true);
@@ -36,9 +37,9 @@ public class ChatUI extends HBox {
         backButton = new Button("\u2190");
         topPane.add(backButton, 0,0);
 
-        Label chatNameLabel = new Label(chat.getName());
+        Label chatNameLabel = new Label(name);
         chatNameLabel.setFont(new Font(15));
-        chatNameLabel.setOnMouseClicked(getMembers(chat));
+        chatNameLabel.setOnMouseClicked(getMembers(membersList));
         topPane.add(chatNameLabel, 1,0);
         chatPane.setTop(topPane);
 
@@ -63,7 +64,7 @@ public class ChatUI extends HBox {
         getChildren().add(chatPane);
     }
 
-    private EventHandler<MouseEvent> getMembers(Chat chat) {
+    private EventHandler<MouseEvent> getMembers(List<User> membersList) {
         return e -> {
             if (getChildren().size() < 2) {
                 if (members.getChildren().isEmpty()) {
@@ -78,7 +79,7 @@ public class ChatUI extends HBox {
                     topBox.setSpacing(20);
                     VBox.setMargin(topBox, new Insets(12, 10, 12, 10));
 
-                    ListView<String> membersName = new ListView<>(FXCollections.observableList(chat.getMembers()
+                    ListView<String> membersName = new ListView<>(FXCollections.observableList(membersList
                             .stream().map(User::getUsername).toList()));
                     membersName.setSelectionModel(null);
                     membersName.setFocusModel(null);

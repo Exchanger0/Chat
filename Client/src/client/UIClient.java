@@ -2,27 +2,22 @@ package client;
 
 import client.elements.*;
 import javafx.application.Application;
-import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
-import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.control.cell.CheckBoxListCell;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import javafx.util.Callback;
 import main.Chat;
+import main.Group;
 import main.User;
 
 import java.io.IOException;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
 
 public class UIClient extends Application {
 
@@ -48,7 +43,7 @@ public class UIClient extends Application {
     @Override
     public void init() throws Exception {
         super.init();
-        socket = new Socket("localhost", 8099);
+        socket = new Socket("192.168.100.7", 8099);
 
         this.controller = new Controller(this, socket);
 
@@ -114,8 +109,8 @@ public class UIClient extends Application {
 
             if (result){
                 chatMenu = new ChatMenu(FXCollections.observableList(controller.getChats()));
-                chatMenu.setListCellFactory(getChatNamesCellFactory());
-                chatMenu.setCreateChatAction(getCreateChatEvent(chatMenu.getChats()));
+                chatMenu.setListCellFactory(getGroupNamesCellFactory());
+                chatMenu.setCreateChatAction(getCreateChatEvent(chatMenu.getGroups()));
 
                 friendMenu = new FriendMenu(controller.getFriends(), controller.getFRequestsForUser(), controller.getFRequestsFromUser());
                 friendMenu.setFriendsCellFactory(getFriendCellFactory());
@@ -151,75 +146,81 @@ public class UIClient extends Application {
         return alert;
     }
 
-    private EventHandler<ActionEvent> getCreateChatEvent(ListView<Chat> chatNames) {
+    private EventHandler<ActionEvent> getCreateChatEvent(ListView<Group> chatNames) {
         return e -> {
             Dialog<Boolean> dialog = new Dialog<>();
             dialog.setTitle("Create chat");
             DialogPane dialogPane = dialog.getDialogPane();
-            VBox box = new VBox();
-            box.setSpacing(10);
-            box.setPadding(new Insets(5));
-            box.setAlignment(Pos.CENTER);
 
-            Label title = new Label("Title of chat: ");
-            TextField titleField = new TextField();
+            VBox root = new VBox();
+            root.setSpacing(10);
+            root.setAlignment(Pos.CENTER);
 
-            HBox titleBox = new HBox(title, titleField);
-            titleBox.setAlignment(Pos.CENTER);
-            titleBox.setSpacing(5);
+            ToggleGroup toggleGroup = new ToggleGroup();
+            RadioButton groupButton = new RadioButton("Group");
+            groupButton.setUserData("group");
+            groupButton.setSelected(true);
+            groupButton.setToggleGroup(toggleGroup);
+            RadioButton chatButton = new RadioButton("Chat");
+            chatButton.setUserData("chat");
+            chatButton.setToggleGroup(toggleGroup);
+            VBox buttonBox = new VBox(groupButton, chatButton);
+            buttonBox.setSpacing(5);
 
-            ScrollPane scrollPane = new ScrollPane();
-            scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-            scrollPane.setFitToWidth(true);
-            scrollPane.setMaxHeight(100);
-
-            List<String> selectedUsers = new ArrayList<>();
-            ListView<String> friends = new ListView<>(
-                    FXCollections.observableList(controller.getFriends().stream().map(User::getUsername).toList()));
-            friends.setCellFactory(CheckBoxListCell.forListView(s -> {
-                SimpleBooleanProperty pr = new SimpleBooleanProperty(false);
-                pr.addListener((observable, oldVal, newVal) -> {
-                    if (newVal){
-                        selectedUsers.add(s);
-                    }else {
-                        selectedUsers.remove(s);
-                    }
-                });
-                return pr;
-            }));
-            scrollPane.setContent(friends);
-
-            Button okButton = new Button("OK");
-            okButton.disableProperty().bind(titleField.textProperty().isEmpty());
-            okButton.setOnAction(e2 -> {
-                if (chatNames.getItems().stream().map(Chat::getName)
-                        .anyMatch(name -> titleField.getText().trim().equals(name))){
+            CreateGroupMenu createGroupMenu = new CreateGroupMenu(controller.getFriends());
+            createGroupMenu.setOkButtonAction(e1 -> {
+                if (chatNames.getItems().stream().map(Group::getName)
+                        .anyMatch(name -> createGroupMenu.getChatName().equals(name))){
                     dialog.setResult(true);
                     dialog.close();
                     getChatExistsAlert().show();
                     return;
                 }
-
-                controller.createChat(titleField.getText().trim(), selectedUsers);
+                controller.createGroup(createGroupMenu.getChatName(), createGroupMenu.getSelectedUsers());
+                dialog.setResult(true);
+                dialog.close();
+            });
+            createGroupMenu.setCancelButtonAction(e1 -> {
                 dialog.setResult(true);
                 dialog.close();
             });
 
-            Button cancleButton = new Button("Cancel");
-            cancleButton.setOnAction(e2 -> {
+            CreateChatMenu createChatMenu = new CreateChatMenu(controller.getFriends());
+            createChatMenu.setOkButtonAction(e1 -> {
+                if (chatNames.getItems().stream().map(group -> {
+                            String name = group.getName();
+                            if (group instanceof Chat ch) name = ch.getPseudonym(controller.getCurrentUser());
+                            return name;
+                        })
+                        .anyMatch(name -> createChatMenu.getSelectedUser().equals(name))) {
+                    dialog.setResult(true);
+                    dialog.close();
+                    getChatExistsAlert().show();
+                    return;
+                }
+                controller.createChat(createChatMenu.getSelectedUser());
+                dialog.setResult(true);
+                dialog.close();
+            });
+            createChatMenu.setCancelButtonAction(e1 -> {
                 dialog.setResult(true);
                 dialog.close();
             });
 
-            HBox buttonBox = new HBox(okButton, cancleButton);
-            buttonBox.setAlignment(Pos.CENTER_RIGHT);
-            buttonBox.setSpacing(5);
+            toggleGroup.selectedToggleProperty().addListener((observer, oldVal, newVal) -> {
+                if (newVal.getUserData().equals("group")) {
+                    root.getChildren().set(1, createGroupMenu);
+                } else if (newVal.getUserData().equals("chat")) {
+                    root.getChildren().set(1, createChatMenu);
+                }
+            });
 
-            box.getChildren().addAll(titleBox,scrollPane, buttonBox);
+            root.getChildren().addAll(buttonBox, createGroupMenu);
+
             dialog.setWidth(300);
             dialog.setHeight(300);
             dialog.setResizable(false);
-            dialogPane.setContent(box);
+            dialogPane.setContent(root);
             dialog.initOwner(primaryStage);
             dialog.show();
         };
@@ -227,18 +228,22 @@ public class UIClient extends Application {
 
     //настраивает отображение элементов ListCell<String> и добавляет слушателя событий
     //для каждого элемента списка
-    private Callback<ListView<Chat>, ListCell<Chat>> getChatNamesCellFactory() {
+    private Callback<ListView<Group>, ListCell<Group>> getGroupNamesCellFactory() {
         return new Callback<>() {
             @Override
-            public ListCell<Chat> call(ListView<Chat> chatListView) {
-                ListCell<Chat> listCell = new ListCell<>() {
+            public ListCell<Group> call(ListView<Group> chatListView) {
+                ListCell<Group> listCell = new ListCell<>() {
                     @Override
-                    protected void updateItem(Chat chat, boolean empty) {
-                        super.updateItem(chat, empty);
-                        if (chat == null && empty) {
+                    protected void updateItem(Group group, boolean empty) {
+                        super.updateItem(group, empty);
+                        if (group == null && empty) {
                             setText("");
                         } else {
-                            setText(chat.getName());
+                            if (group instanceof Chat ch){
+                                setText(ch.getPseudonym(controller.getCurrentUser()));
+                            }else {
+                                setText(group.getName());
+                            }
                         }
                     }
                 };
@@ -249,7 +254,12 @@ public class UIClient extends Application {
                     if (index >= 0 && index < chatListView.getItems().size()) {
                         controller.setCurrentChat(chatListView.getItems().get(index));
 
-                        chat = new ChatUI(controller.getCurrentChat());
+                        Group group = controller.getCurrentChat();
+                        String chatName = group.getName();
+                        if (group instanceof Chat ch){
+                            chatName = ch.getPseudonym(controller.getCurrentUser());
+                        }
+                        chat = new ChatUI(chatName, group.getMembers());
                         initChatActions();
                         scene.setRoot(chat);
 
@@ -364,8 +374,8 @@ public class UIClient extends Application {
         }
     }
 
-    public void addChat(Chat chat){
-        chatMenu.addChat(chat);
+    public void addGroup(Group group){
+        chatMenu.addGroup(group);
     }
 
     public void deleteFriend(User friend){

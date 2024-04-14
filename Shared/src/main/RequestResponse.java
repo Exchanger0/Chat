@@ -5,7 +5,7 @@ public enum RequestResponse {
     REGISTRATION,
     LOG_IN,
     EXIT,
-    CREATE_CHAT,
+    CREATE_GROUP,CREATE_CHAT,
     SET_CURRENT_CHAT,
     SEND_MESSAGE,
     UPDATE_MESSAGES,

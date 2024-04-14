@@ -1,6 +1,7 @@
 package server;
 
 import main.Chat;
+import main.Group;
 import main.RequestResponse;
 import main.User;
 
@@ -25,7 +26,7 @@ public class ClientHandler implements Runnable {
     private final ObjectOutputStream objectOutputStream;
 
     private User currentUser;
-    private Chat currentChat;
+    private Group currentGroup;
 
     public ClientHandler(Socket socket, Server server) {
         this.socket = socket;
@@ -55,28 +56,39 @@ public class ClientHandler implements Runnable {
                     System.out.println("Start login " + currThreadName);
                     logIn();
                     System.out.println("End login " + currThreadName);
-                } else if (str.equals(RequestResponse.CREATE_CHAT.name())) {
-                    Chat chat = new Chat(reader.readUTF());
-                    chat.addMember(currentUser);
+                } else if (str.equals(RequestResponse.CREATE_GROUP.name())) {
+                    Group group = new Group(reader.readUTF());
+                    group.addMember(currentUser);
                     List<String> memberNames = (List<String>) reader.readObject();
                     for (String memberName : memberNames){
                         User user = server.getUser(memberName);
                         if (user != null) {
-                            user.addChat(chat);
-                            server.notifyClientHandlers(user, new ServerResponse(RequestResponse.UPDATE_CHATS, chat));
-                            chat.addMember(user);
+                            user.addGroup(group);
+                            server.notifyClientHandlers(user, new ServerResponse(RequestResponse.UPDATE_CHATS, group));
+                            group.addMember(user);
                         }
                     }
-                    currentUser.addChat(chat);
-                    server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.UPDATE_CHATS, chat));
+                    currentUser.addGroup(group);
+                    server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.UPDATE_CHATS, group));
+                } else if (str.equals(RequestResponse.CREATE_CHAT.name())) {
+                    User user = server.getUser(reader.readUTF());
+                    if (user != null) {
+                        Chat chat = new Chat(currentUser, user);
+                        chat.addMember(currentUser);
+                        user.addGroup(chat);
+                        chat.addMember(user);
+                        server.notifyClientHandlers(user, new ServerResponse(RequestResponse.UPDATE_CHATS, chat));
+                        currentUser.addGroup(chat);
+                        server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.UPDATE_CHATS, chat));
+                    }
                 } else if (str.equals(RequestResponse.SET_CURRENT_CHAT.name())) {
-                    currentChat = currentUser.getChat((String) reader.readObject());
+                    currentGroup = currentUser.getGroup((String) reader.readObject());
                 } else if (str.equals(RequestResponse.SEND_MESSAGE.name())) {
                     String message = reader.readUTF();
-                    currentChat.sendMessage(currentUser.getUsername() + ": " + message);
-                    for (User user : currentChat.getMembers()){
+                    currentGroup.sendMessage(currentUser.getUsername() + ": " + message);
+                    for (User user : currentGroup.getMembers()){
                         server.notifyClientHandlers(user, new ServerResponse(RequestResponse.UPDATE_MESSAGES,
-                                List.of(currentChat.getName(), currentUser.getUsername() + ": " + message)));
+                                List.of(currentGroup.getName(), currentUser.getUsername() + ": " + message)));
                     }
                 } else if (str.equals(RequestResponse.DELETE_FRIEND.name())) {
                     User deleteFriend = server.getUser(reader.readUTF());

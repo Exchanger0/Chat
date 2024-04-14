@@ -9,7 +9,7 @@ import java.util.Objects;
 public class User implements Serializable {
     private final String username;
     private final String password;
-    private final HashMap<String,Chat> chats = new HashMap<>();
+    private final HashMap<String, Group> groups = new HashMap<>();
     private final List<User> friends = new ArrayList<>();
     private final List<User> fRequestsForUser = new ArrayList<>();
     private final List<User> fRequestsFromUser = new ArrayList<>();
@@ -27,42 +27,20 @@ public class User implements Serializable {
         return this.password.equals(password);
     }
 
-    public List<Chat> getChats(){
-        synchronized (chats) {
-            return new ArrayList<>(chats.values());
+    public List<Group> getGroups(){
+        synchronized (groups) {
+            return new ArrayList<>(groups.values());
         }
     }
 
-    public Chat getChat(String name){
-        return chats.get(name);
+    public Group getGroup(String name){
+
+        return groups.get(name);
     }
 
-    public synchronized void addChat(Chat chat){
-        synchronized (chats) {
-            chats.put(chat.getName(), chat);
-        }
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        User user = (User) o;
-        return Objects.equals(username, user.username) && Objects.equals(password, user.password);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(username, password);
-    }
-
-    public boolean addFriend(User user){
-        synchronized (friends) {
-            if (!friends.contains(user)) {
-                friends.add(user);
-                return true;
-            }
-            return false;
+    public synchronized void addGroup(Group group){
+        synchronized (groups) {
+            groups.put(group.getName(), group);
         }
     }
 
@@ -127,6 +105,29 @@ public class User implements Serializable {
     public List<User> getFRequestsFromUser() {
         synchronized (fRequestsFromUser) {
             return fRequestsFromUser;
+        }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        User user = (User) o;
+        return Objects.equals(username, user.username) && Objects.equals(password, user.password);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(username, password);
+    }
+
+    public boolean addFriend(User user){
+        synchronized (friends) {
+            if (!friends.contains(user)) {
+                friends.add(user);
+                return true;
+            }
+            return false;
         }
     }
 }

@@ -13,15 +13,15 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import javafx.util.Callback;
-import main.Chat;
+import main.Group;
 
 public class ChatMenu extends BorderPane {
-    private final ListView<Chat> chats;
+    private final ListView<Group> groups;
     private final Button createChat;
-    public ChatMenu(ObservableList<Chat> chatList) {
-        chats = new ListView<>();
-        chats.setItems(chatList);
-        chats.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+    public ChatMenu(ObservableList<Group> groupList) {
+        groups = new ListView<>();
+        groups.setItems(groupList);
+        groups.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
 
         //создает новый чат
         createChat = new Button("+");
@@ -31,11 +31,11 @@ public class ChatMenu extends BorderPane {
         BorderPane.setMargin(createChat, new Insets(5));
 
         setTop(createChat);
-        setCenter(chats);
+        setCenter(groups);
     }
 
-    public void setListCellFactory(Callback<ListView<Chat>, ListCell<Chat>> factory){
-        chats.setCellFactory(factory);
+    public void setListCellFactory(Callback<ListView<Group>, ListCell<Group>> factory){
+        groups.setCellFactory(factory);
     }
 
 
@@ -43,11 +43,11 @@ public class ChatMenu extends BorderPane {
         createChat.setOnAction(action);
     }
 
-    public ListView<Chat> getChats() {
-        return chats;
+    public ListView<Group> getGroups() {
+        return groups;
     }
 
-    public void addChat(Chat chat){
-        chats.getItems().add(chat);
+    public void addGroup(Group group){
+        groups.getItems().add(group);
     }
 }

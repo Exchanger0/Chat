@@ -1,7 +1,7 @@
 package client;
 
 import javafx.application.Platform;
-import main.Chat;
+import main.Group;
 import main.RequestResponse;
 import main.User;
 
@@ -17,7 +17,7 @@ public class Controller implements Runnable{
     private final ObjectInputStream reader;
     private final ObjectOutputStream writer;
     private User user;
-    private Chat currentChat;
+    private Group currentGroup;
     private final CyclicBarrier waitResponse = new CyclicBarrier(2);
     private boolean registrationRes = false;
 
@@ -46,13 +46,13 @@ public class Controller implements Runnable{
                     registrationRes = false;
                     waitResponse.await();
                 } else if (serverResponse.equals(RequestResponse.UPDATE_CHATS.name())) {
-                    Chat newChat = (Chat) reader.readObject();
-                    user.addChat(newChat);
-                    Platform.runLater(() -> client.addChat(newChat));
+                    Group newGroup = (Group) reader.readObject();
+                    user.addGroup(newGroup);
+                    Platform.runLater(() -> client.addGroup(newGroup));
                 } else if (serverResponse.equals(RequestResponse.UPDATE_MESSAGES.name())) {
                     List<String> data = (List<String>) reader.readObject();
-                    user.getChat(data.getFirst()).sendMessage(data.get(1));
-                    if (currentChat.getName().equals(data.get(0))) {
+                    user.getGroup(data.getFirst()).sendMessage(data.get(1));
+                    if (currentGroup.getName().equals(data.get(0))) {
                         Platform.runLater(() -> client.addMessage(data.get(1)));
                     }
                 } else if (serverResponse.equals(RequestResponse.DELETE_FRIEND.name())) {
@@ -126,15 +126,15 @@ public class Controller implements Runnable{
         return user != null;
     }
 
-    public List<Chat> getChats(){
-        return user.getChats();
+    public List<Group> getChats(){
+        return user.getGroups();
     }
 
-    public void setCurrentChat(Chat chat) {
-        currentChat = chat;
+    public void setCurrentChat(Group group) {
+        currentGroup = group;
         try {
             writer.writeUTF(RequestResponse.SET_CURRENT_CHAT.name());
-            writer.writeObject(chat.getName());
+            writer.writeObject(group.getName());
             writer.flush();
         }catch (IOException e) {
             throw new RuntimeException(e);
@@ -142,14 +142,24 @@ public class Controller implements Runnable{
     }
 
     public List<String> getMessages(){
-        return currentChat.getMessages();
+        return currentGroup.getMessages();
     }
 
-    public void createChat(String title, List<String> users){
+    public void createGroup(String title, List<String> users){
         try {
-            writer.writeUTF(RequestResponse.CREATE_CHAT.name());
+            writer.writeUTF(RequestResponse.CREATE_GROUP.name());
             writer.writeUTF(title);
             writer.writeObject(users);
+            writer.flush();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void createChat(String user){
+        try {
+            writer.writeUTF(RequestResponse.CREATE_CHAT.name());
+            writer.writeUTF(user);
             writer.flush();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -166,8 +176,8 @@ public class Controller implements Runnable{
         }
     }
 
-    public Chat getCurrentChat() {
-        return currentChat;
+    public Group getCurrentChat() {
+        return currentGroup;
     }
 
     public List<User> getFriends(){
@@ -230,5 +240,9 @@ public class Controller implements Runnable{
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public User getCurrentUser(){
+        return user;
     }
 }
