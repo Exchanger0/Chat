@@ -81,6 +81,27 @@ public class ClientHandler implements Runnable {
                         currentUser.addGroup(chat);
                         server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.UPDATE_CHATS, chat));
                     }
+                } else if (str.equals(RequestResponse.DELETE_GROUP.name())) {
+                    System.out.println("DELETE GROUP");
+                    System.out.println("Before: " + currentUser.getGroups());
+                    Group group = currentUser.getGroup(reader.readUTF());
+                    group.deleteMember(currentUser);
+                    currentUser.deleteGroup(group);
+                    for (User user : group.getMembers()){
+                        server.notifyClientHandlers(user, new ServerResponse(RequestResponse.DELETE_MEMBER,
+                                List.<Object>of(group.getName(), currentUser)));
+                    }
+                    server.notifyClientHandlers(currentUser, new ServerResponse(RequestResponse.DELETE_GROUP, group));
+                    System.out.println("After: " + currentUser.getGroups());
+                } else if (str.equals(RequestResponse.DELETE_CHAT.name())) {
+                    System.out.println("DELETE CHAT");
+                    System.out.println("Before: " + currentUser.getGroups());
+                    Chat chat = (Chat) currentUser.getGroup(reader.readUTF());
+                    for (User user : chat.getMembers()){
+                        user.deleteGroup(chat);
+                        server.notifyClientHandlers(user, new ServerResponse(RequestResponse.DELETE_CHAT, chat));
+                    }
+                    System.out.println("After: " + currentUser.getGroups());
                 } else if (str.equals(RequestResponse.SET_CURRENT_CHAT.name())) {
                     currentGroup = currentUser.getGroup((String) reader.readObject());
                 } else if (str.equals(RequestResponse.SEND_MESSAGE.name())) {

@@ -50,4 +50,8 @@ public class ChatMenu extends BorderPane {
     public void addGroup(Group group){
         groups.getItems().add(group);
     }
+
+    public void deleteGroup(Group group){
+        groups.getItems().remove(group);
+    }
 }

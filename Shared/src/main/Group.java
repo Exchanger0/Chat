@@ -42,6 +42,12 @@ public class Group implements Serializable {
         }
     }
 
+    public void deleteMember(User user){
+        synchronized (members){
+            members.remove(user);
+        }
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

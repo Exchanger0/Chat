@@ -8,6 +8,7 @@ import javafx.event.EventHandler;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
@@ -43,7 +44,7 @@ public class UIClient extends Application {
     @Override
     public void init() throws Exception {
         super.init();
-        socket = new Socket("192.168.100.7", 8099);
+        socket = new Socket("localhost", 8099);
 
         this.controller = new Controller(this, socket);
 
@@ -108,9 +109,9 @@ public class UIClient extends Application {
                     logInMenu.getPasswordField().getText());
 
             if (result){
-                chatMenu = new ChatMenu(FXCollections.observableList(controller.getChats()));
+                chatMenu = new ChatMenu(FXCollections.observableList(controller.getGroups()));
                 chatMenu.setListCellFactory(getGroupNamesCellFactory());
-                chatMenu.setCreateChatAction(getCreateChatEvent(chatMenu.getGroups()));
+                chatMenu.setCreateChatAction(getCreateGroupEvent(chatMenu.getGroups()));
 
                 friendMenu = new FriendMenu(controller.getFriends(), controller.getFRequestsForUser(), controller.getFRequestsFromUser());
                 friendMenu.setFriendsCellFactory(getFriendCellFactory());
@@ -146,7 +147,7 @@ public class UIClient extends Application {
         return alert;
     }
 
-    private EventHandler<ActionEvent> getCreateChatEvent(ListView<Group> chatNames) {
+    private EventHandler<ActionEvent> getCreateGroupEvent(ListView<Group> chatNames) {
         return e -> {
             Dialog<Boolean> dialog = new Dialog<>();
             dialog.setTitle("Create chat");
@@ -250,24 +251,38 @@ public class UIClient extends Application {
 
                 listCell.setFont(new Font(20));
                 listCell.setOnMouseClicked(e -> {
-                    int index = listCell.getIndex();
-                    if (index >= 0 && index < chatListView.getItems().size()) {
-                        controller.setCurrentChat(chatListView.getItems().get(index));
+                    if (e.getButton().equals(MouseButton.PRIMARY)) {
+                        int index = listCell.getIndex();
+                        System.out.println(index);
+                        System.out.println(listCell.getItem());
+                        if (index >= 0 && index < chatListView.getItems().size()) {
+                            Group group = chatListView.getItems().get(index);
+                            controller.setCurrentChat(chatListView.getItems().get(index));
+                            String chatName = group.getName();
+                            if (group instanceof Chat ch) {
+                                chatName = ch.getPseudonym(controller.getCurrentUser());
+                            }
+                            chat = new ChatUI(chatName, group.getMembers());
+                            initChatActions();
+                            scene.setRoot(chat);
 
-                        Group group = controller.getCurrentChat();
-                        String chatName = group.getName();
-                        if (group instanceof Chat ch){
-                            chatName = ch.getPseudonym(controller.getCurrentUser());
-                        }
-                        chat = new ChatUI(chatName, group.getMembers());
-                        initChatActions();
-                        scene.setRoot(chat);
-
-                        for (String s : controller.getMessages()){
-                            chat.addMessage(s);
+                            for (String s : controller.getMessages()) {
+                                chat.addMessage(s);
+                            }
                         }
                     }
                 });
+
+                MenuItem menuItem = new MenuItem("Delete");
+                menuItem.setOnAction(e -> {
+                    Group group = listCell.getItem();
+                    if (group instanceof Chat ch) {
+                        controller.deleteChat(ch);
+                    } else {
+                        controller.deleteGroup(group);
+                    }
+                });
+                listCell.setContextMenu(new ContextMenu(menuItem));
 
                 return listCell;
             }
@@ -400,5 +415,9 @@ public class UIClient extends Application {
 
     public void addFRFromUser(User user){
         friendMenu.addFRFromUser(user);
+    }
+
+    public void deleteGroup(Group group){
+        chatMenu.deleteGroup(group);
     }
 }

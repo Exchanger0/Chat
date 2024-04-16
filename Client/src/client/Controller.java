@@ -1,6 +1,7 @@
 package client;
 
 import javafx.application.Platform;
+import main.Chat;
 import main.Group;
 import main.RequestResponse;
 import main.User;
@@ -51,9 +52,12 @@ public class Controller implements Runnable{
                     Platform.runLater(() -> client.addGroup(newGroup));
                 } else if (serverResponse.equals(RequestResponse.UPDATE_MESSAGES.name())) {
                     List<String> data = (List<String>) reader.readObject();
-                    user.getGroup(data.getFirst()).sendMessage(data.get(1));
-                    if (currentGroup.getName().equals(data.get(0))) {
-                        Platform.runLater(() -> client.addMessage(data.get(1)));
+                    Group group = user.getGroup(data.getFirst());
+                    if (group != null) {
+                        group.sendMessage(data.get(1));
+                        if (currentGroup != null && currentGroup.getName().equals(data.get(0))) {
+                            Platform.runLater(() -> client.addMessage(data.get(1)));
+                        }
                     }
                 } else if (serverResponse.equals(RequestResponse.DELETE_FRIEND.name())) {
                     User deleteFriend = (User) reader.readObject();
@@ -79,6 +83,14 @@ public class Controller implements Runnable{
                     User user1 = (User) reader.readObject();
                     user.getFRequestsFromUser().add(user1);
                     Platform.runLater(() -> client.addFRFromUser(user1));
+                } else if (serverResponse.equals(RequestResponse.DELETE_GROUP.name()) ||
+                        serverResponse.equals(RequestResponse.DELETE_CHAT.name())) {
+                    Group group = (Group) reader.readObject();
+                    user.deleteGroup(group);
+                    Platform.runLater(() -> client.deleteGroup(group));
+                } else if (serverResponse.equals(RequestResponse.DELETE_MEMBER.name())) {
+                    List<Object> data = (List<Object>) reader.readObject();
+                    user.getGroup((String) data.getFirst()).deleteMember((User) data.getLast());
                 }
             } catch (SocketException socketException) {
                 break;
@@ -126,7 +138,7 @@ public class Controller implements Runnable{
         return user != null;
     }
 
-    public List<Group> getChats(){
+    public List<Group> getGroups(){
         return user.getGroups();
     }
 
@@ -244,5 +256,25 @@ public class Controller implements Runnable{
 
     public User getCurrentUser(){
         return user;
+    }
+
+    public void deleteGroup(Group group){
+        try {
+            writer.writeUTF(RequestResponse.DELETE_GROUP.name());
+            writer.writeUTF(group.getName());
+            writer.flush();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void deleteChat(Chat chat){
+        try {
+            writer.writeUTF(RequestResponse.DELETE_CHAT.name());
+            writer.writeUTF(chat.getName());
+            writer.flush();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
