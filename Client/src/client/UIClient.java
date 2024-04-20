@@ -338,7 +338,10 @@ public class UIClient extends Application {
 
                 MenuItem agree = new MenuItem("Agree");
                 agree.setOnAction(e -> {
-                    controller.addFriend(listCell.getItem());
+                    User user = listCell.getItem();
+                    if (user != null){
+                        controller.addFriend(user);
+                    }
                 });
                 listCell.setContextMenu(new ContextMenu(disagree, agree));
                 return listCell;

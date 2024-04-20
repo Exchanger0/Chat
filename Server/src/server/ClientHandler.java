@@ -21,7 +21,7 @@ public class ClientHandler implements Runnable {
     private final Socket socket;
     private final Server server;
     //ответы которые надо отправить клиенту
-    private final BlockingQueue<ServerResponse> responses = new ArrayBlockingQueue<>(30);
+    private final BlockingQueue<ServerResponse> responses = new ArrayBlockingQueue<>(100);
     private final ObjectInputStream reader;
     private final ObjectOutputStream objectOutputStream;
 

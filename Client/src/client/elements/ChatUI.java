@@ -9,7 +9,9 @@ import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
+import javafx.stage.Stage;
 import main.User;
 
 import java.util.List;
@@ -17,15 +19,33 @@ import java.util.List;
 public class ChatUI extends HBox {
     private final VBox members = new VBox();
     private final Button backButton;
-    private final Button sendButton;
+    private final Button sendButton = new Button("\u2A65");
     private final TextField message;
-    private final TextArea messages;
+    private final VBox messages;
+
     public ChatUI(String name, List<User> membersList) {
-        messages = new TextArea();
-        messages.setEditable(false);
-        messages.setWrapText(true);
+        messages = new VBox();
+        messages.setAlignment(Pos.TOP_LEFT);
+        messages.setSpacing(10);
+        messages.setPadding(new Insets(15));
+        messages.setFillWidth(true);
+        messages.maxWidthProperty().bind(
+                Stage.getWindows().getFirst().widthProperty().subtract(60)
+        );
+
+        ScrollPane msgScrollPane = new ScrollPane();
+        msgScrollPane.setContent(messages);
+        msgScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        msgScrollPane.setBorder(new Border(
+                new BorderStroke(Color.rgb(99, 108, 118), BorderStrokeStyle.SOLID,
+                        null, new BorderWidths(1))));
+
+        messages.heightProperty().addListener((ob, oldVal, newVal) -> {
+            msgScrollPane.setVvalue(1D);
+        });
+
         BorderPane chatPane = new BorderPane();
-        chatPane.setCenter(messages);
+        chatPane.setCenter(msgScrollPane);
 
         GridPane topPane = new GridPane();
         ColumnConstraints con1 = new ColumnConstraints();
@@ -43,23 +63,25 @@ public class ChatUI extends HBox {
         topPane.add(chatNameLabel, 1,0);
         chatPane.setTop(topPane);
 
-        HBox sendBox = new HBox();
-        sendBox.setPadding(new Insets(10));
-        sendBox.setSpacing(5);
-        sendBox.setAlignment(Pos.CENTER);
-
-        sendButton = new Button("\u2A65");
+        GridPane sendPane = new GridPane();
+        sendPane.setPadding(new Insets(10));
+        ColumnConstraints c = new ColumnConstraints();
+        c.setFillWidth(true);
+        c.setHgrow(Priority.ALWAYS);
+        sendPane.getColumnConstraints().add(c);
 
         message = new TextField();
-        message.setPrefColumnCount(messages.getPrefColumnCount());
+        message.setMaxWidth(Double.MAX_VALUE);
         message.setOnKeyReleased(e -> {
             if (e.getCode().getCode() == KeyCode.ENTER.getCode()){
                 sendButton.fire();
             }
         });
 
-        sendBox.getChildren().addAll(message, sendButton);
-        chatPane.setBottom(sendBox);
+        GridPane.setMargin(message, new Insets(0,10,0,0));
+        sendPane.add(message, 0 ,0);
+        sendPane.add(sendButton, 1 ,0);
+        chatPane.setBottom(sendPane);
         setHgrow(chatPane, Priority.ALWAYS);
         getChildren().add(chatPane);
     }
@@ -105,6 +127,12 @@ public class ChatUI extends HBox {
     }
 
     public void addMessage(String message){
-        messages.appendText(message + "\n");
+        Label text = new Label(message);
+        text.setWrapText(true);
+        text.setPadding(new Insets(5));
+        text.setBackground(new Background(
+                new BackgroundFill(Color.rgb(211, 211, 211), new CornerRadii(10), null)));
+        text.setWrapText(true);
+        messages.getChildren().add(text);
     }
 }
