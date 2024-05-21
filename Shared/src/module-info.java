@@ -1,3 +1,0 @@
-module shared {
-    exports main;
-}
