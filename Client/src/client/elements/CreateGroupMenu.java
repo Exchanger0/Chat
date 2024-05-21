@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CreateGroupMenu extends VBox {
-    private final List<String> selectedUsers = new ArrayList<>();
+    private final ArrayList<String> selectedUsers = new ArrayList<>();
     private final Button okButton;
     private final Button cancelButton;
     private final TextField titleField;
@@ -71,7 +71,7 @@ public class CreateGroupMenu extends VBox {
         cancelButton.setOnAction(action);
     }
 
-    public List<String> getSelectedUsers() {
+    public ArrayList<String> getSelectedUsers() {
         return selectedUsers;
     }
 

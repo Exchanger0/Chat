@@ -19,7 +19,6 @@ import main.User;
 
 import java.io.IOException;
 import java.net.Socket;
-
 public class UIClient extends Application {
 
     private Stage primaryStage;
@@ -37,6 +36,8 @@ public class UIClient extends Application {
     private Controller controller;
     private Thread listenerThread;
 
+    private boolean allOk = true;
+
     public static void main(String[] args) {
         launch(args);
     }
@@ -44,9 +45,12 @@ public class UIClient extends Application {
     @Override
     public void init() throws Exception {
         super.init();
-        socket = new Socket("localhost", 8099);
-
-        this.controller = new Controller(this, socket);
+        try {
+            socket = new Socket("localhost", 8099);
+            this.controller = new Controller(this, socket);
+        } catch (IOException ex) {
+            allOk = false;
+        }
 
         listenerThread = new Thread(controller);
         listenerThread.setDaemon(true);
@@ -56,27 +60,31 @@ public class UIClient extends Application {
     @Override
     public void start(Stage stage) {
         primaryStage = stage;
-        initLogInEvent();
-        initRegEvent();
-        initMainMenuButtonActions();
+        if (allOk) {
+            initLogInEvent();
+            initRegEvent();
+            initMainMenuButtonActions();
 
-        scene = new Scene(mainMenu);
-        stage.setOnCloseRequest(e -> {
-            try {
-                controller.exit();
-                socket.close();
-                listenerThread.interrupt();
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
-            }
+            scene = new Scene(mainMenu);
+            stage.setOnCloseRequest(e -> {
+                try {
+                    controller.exit();
+                    socket.close();
+                    listenerThread.interrupt();
+                } catch (IOException ex) {
+                    stage.close();
+                }
 
-        });
-        stage.setScene(scene);
-        stage.setTitle("Chat");
-        stage.setHeight(600);
-        stage.setWidth(600);
-        stage.centerOnScreen();
-        stage.show();
+            });
+            stage.setScene(scene);
+            stage.setTitle("Chat");
+            stage.setHeight(600);
+            stage.setWidth(600);
+            stage.centerOnScreen();
+            stage.show();
+        }else {
+            showError("Connection error");
+        }
     }
 
     private void initMainMenuButtonActions() {
@@ -91,44 +99,14 @@ public class UIClient extends Application {
     }
 
     private void initRegEvent(){
-        registrationMenu.setSendButtonAction(e -> {
-            boolean res = controller.registration(registrationMenu.getUsernameField().getText(),
-                    registrationMenu.getPasswordField().getText());
-            if (res){
-                logInMenu.send(registrationMenu.getUsernameField().getText(), registrationMenu.getPasswordField().getText());
-            }else {
-                registrationMenu.setError("User with this name already exists");
-            }
-        });
+        registrationMenu.setSendButtonAction(e -> controller.registration(registrationMenu.getUsernameField().getText(),
+                registrationMenu.getPasswordField().getText()));
         initBackButtonEvent(registrationMenu);
     }
 
     private void initLogInEvent(){
-        logInMenu.setSendButtonAction(e -> {
-            boolean result = controller.login(logInMenu.getUsernameField().getText(),
-                    logInMenu.getPasswordField().getText());
-
-            if (result){
-                chatMenu = new ChatMenu(FXCollections.observableList(controller.getGroups()));
-                chatMenu.setListCellFactory(getGroupNamesCellFactory());
-                chatMenu.setCreateChatAction(getCreateGroupEvent(chatMenu.getGroups()));
-
-                friendMenu = new FriendMenu(controller.getFriends(), controller.getFRequestsForUser(), controller.getFRequestsFromUser());
-                friendMenu.setFriendsCellFactory(getFriendCellFactory());
-                friendMenu.setFRForUserCellFactory(getFRForUserCellFactory());
-                friendMenu.setFRFromUserCellFactory(getFRFromUserCellFactory());
-                friendMenu.setSendRequestAction(e1 -> {
-                    controller.sendFriendRequest(friendMenu.getUsernameField().getText());
-                    friendMenu.getUsernameField().setText("");
-                });
-                cTabPane.addTab("Chats", chatMenu);
-                cTabPane.addTab("Friends", friendMenu);
-                scene.setRoot(cTabPane);
-                primaryStage.setTitle(primaryStage.getTitle() + "(" + logInMenu.getUsernameField().getText() + ")");
-            }else {
-                logInMenu.setError("Invalid name and/or password");
-            }
-        });
+        logInMenu.setSendButtonAction(e -> controller.login(logInMenu.getUsernameField().getText(),
+                logInMenu.getPasswordField().getText()));
         initBackButtonEvent(logInMenu);
     }
 
@@ -147,7 +125,8 @@ public class UIClient extends Application {
         return alert;
     }
 
-    private EventHandler<ActionEvent> getCreateGroupEvent(ListView<Group> chatNames) {
+    //возвращает ивент кнопки, который создает диалоговое окно, отвечающее за создание чата/группы
+    private EventHandler<ActionEvent> getCreateChatEvent(ListView<Group> chatNames) {
         return e -> {
             Dialog<Boolean> dialog = new Dialog<>();
             dialog.setTitle("Create chat");
@@ -188,9 +167,9 @@ public class UIClient extends Application {
 
             CreateChatMenu createChatMenu = new CreateChatMenu(controller.getFriends());
             createChatMenu.setOkButtonAction(e1 -> {
-                if (chatNames.getItems().stream().map(group -> {
-                            String name = group.getName();
-                            if (group instanceof Chat ch) name = ch.getPseudonym(controller.getCurrentUser());
+                if (chatNames.getItems().stream().map(chat -> {
+                            String name = chat.getName();
+                            if (chat instanceof Chat ch) name = ch.getPseudonym(controller.getCurrentUser());
                             return name;
                         })
                         .anyMatch(name -> createChatMenu.getSelectedUser().equals(name))) {
@@ -229,7 +208,7 @@ public class UIClient extends Application {
 
     //настраивает отображение элементов ListCell<String> и добавляет слушателя событий
     //для каждого элемента списка
-    private Callback<ListView<Group>, ListCell<Group>> getGroupNamesCellFactory() {
+    private Callback<ListView<Group>, ListCell<Group>> getChatNamesCellFactory() {
         return new Callback<>() {
             @Override
             public ListCell<Group> call(ListView<Group> chatListView) {
@@ -256,18 +235,18 @@ public class UIClient extends Application {
                         System.out.println(index);
                         System.out.println(listCell.getItem());
                         if (index >= 0 && index < chatListView.getItems().size()) {
-                            Group group = chatListView.getItems().get(index);
+                            Group chat = chatListView.getItems().get(index);
                             controller.setCurrentChat(chatListView.getItems().get(index));
-                            String chatName = group.getName();
-                            if (group instanceof Chat ch) {
+                            String chatName = chat.getName();
+                            if (chat instanceof Chat ch) {
                                 chatName = ch.getPseudonym(controller.getCurrentUser());
                             }
-                            chat = new ChatUI(chatName, group.getMembers());
+                            UIClient.this.chat = new ChatUI(chatName, chat.getMembers());
                             initChatActions();
-                            scene.setRoot(chat);
+                            scene.setRoot(UIClient.this.chat);
 
                             for (String s : controller.getMessages()) {
-                                chat.addMessage(s);
+                                UIClient.this.chat.addMessage(s);
                             }
                         }
                     }
@@ -275,11 +254,11 @@ public class UIClient extends Application {
 
                 MenuItem menuItem = new MenuItem("Delete");
                 menuItem.setOnAction(e -> {
-                    Group group = listCell.getItem();
-                    if (group instanceof Chat ch) {
+                    Group chat = listCell.getItem();
+                    if (chat instanceof Chat ch) {
                         controller.deleteChat(ch);
                     } else {
-                        controller.deleteGroup(group);
+                        controller.deleteChat(chat);
                     }
                 });
                 listCell.setContextMenu(new ContextMenu(menuItem));
@@ -289,6 +268,7 @@ public class UIClient extends Application {
         };
     }
 
+    //настраивает отображение списка друзей
     private Callback<ListView<User>, ListCell<User>> getFriendCellFactory() {
         return new Callback<>() {
             @Override
@@ -315,6 +295,7 @@ public class UIClient extends Application {
         };
     }
 
+    //настраивает отображение списка запросов на дружбу для текущего пользователя
     private Callback<ListView<User>, ListCell<User>> getFRForUserCellFactory() {
         return new Callback<>() {
             @Override
@@ -349,6 +330,7 @@ public class UIClient extends Application {
         };
     }
 
+    //настраивает отображение списка запросов на дружбу от текущего пользователя
     private Callback<ListView<User>, ListCell<User>> getFRFromUserCellFactory() {
         return new Callback<>() {
             @Override
@@ -392,11 +374,12 @@ public class UIClient extends Application {
         }
     }
 
-    public void addGroup(Group group){
-        chatMenu.addGroup(group);
+    public void addChat(Group chat){
+        chatMenu.addChat(chat);
     }
 
     public void deleteFriend(User friend){
+        System.out.println("delete friend client");
         friendMenu.deleteFriend(friend);
     }
 
@@ -420,7 +403,45 @@ public class UIClient extends Application {
         friendMenu.addFRFromUser(user);
     }
 
-    public void deleteGroup(Group group){
-        chatMenu.deleteGroup(group);
+    public void deleteChat(Group chat){
+        chatMenu.deleteChat(chat);
+    }
+
+    public void registration(boolean success) {
+        if (success) {
+            logInMenu.send(registrationMenu.getUsernameField().getText(), registrationMenu.getPasswordField().getText());
+        } else {
+            registrationMenu.setError("User with this name already exists");
+        }
+    }
+
+    public void logIn(boolean success) {
+        if (success){
+            chatMenu = new ChatMenu(FXCollections.observableList(controller.getChats()));
+            chatMenu.setListCellFactory(getChatNamesCellFactory());
+            chatMenu.setCreateChatAction(getCreateChatEvent(chatMenu.getChats()));
+
+            friendMenu = new FriendMenu(controller.getFriends(), controller.getFRequestsForUser(), controller.getFRequestsFromUser());
+            friendMenu.setFriendsCellFactory(getFriendCellFactory());
+            friendMenu.setFRForUserCellFactory(getFRForUserCellFactory());
+            friendMenu.setFRFromUserCellFactory(getFRFromUserCellFactory());
+            friendMenu.setSendRequestAction(e1 -> {
+                controller.sendFriendRequest(friendMenu.getUsernameField().getText());
+                friendMenu.getUsernameField().setText("");
+            });
+            cTabPane.addTab("Chats", chatMenu);
+            cTabPane.addTab("Friends", friendMenu);
+            scene.setRoot(cTabPane);
+            primaryStage.setTitle(primaryStage.getTitle() + "(" + logInMenu.getUsernameField().getText() + ")");
+        }else {
+            logInMenu.setError("Invalid name and/or password");
+        }
+    }
+
+    public void showError(String message){
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("Error");
+        alert.setContentText(message);
+        alert.show();
     }
 }

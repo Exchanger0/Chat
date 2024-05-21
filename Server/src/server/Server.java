@@ -1,5 +1,6 @@
 package server;
 
+import main.RequestResponse;
 import main.User;
 
 import java.io.IOException;
@@ -82,7 +83,7 @@ public class Server {
     }
 
     //уведомление всех клиентов одного пользователя
-    public void notifyClientHandlers(User user, ServerResponse notification) {
+    public void notifyClientHandlers(User user, RequestResponse notification) {
         for (ClientHandler handler : userSessions.get(user)) {
             handler.addServerResponse(notification);
         }

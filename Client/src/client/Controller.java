@@ -1,7 +1,6 @@
 package client;
 
 import javafx.application.Platform;
-import main.Chat;
 import main.Group;
 import main.RequestResponse;
 import main.User;
@@ -9,19 +8,17 @@ import main.User;
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.CyclicBarrier;
+
+import static main.RequestResponse.Title.*;
 
 public class Controller implements Runnable{
     private final UIClient client;
     private final ObjectInputStream reader;
     private final ObjectOutputStream writer;
-    private User user;
-    private Group currentGroup;
-    private final CyclicBarrier waitResponse = new CyclicBarrier(2);
-    private boolean registrationRes = false;
-
+    private User currentUser;
+    private Group currentChat;
 
     public Controller(UIClient client, Socket socket) throws IOException {
         this.client = client;
@@ -33,136 +30,124 @@ public class Controller implements Runnable{
     public void run() {
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                String serverResponse = reader.readUTF();
+                RequestResponse serverResponse = (RequestResponse) reader.readObject();
 
-                if (serverResponse.equals(RequestResponse.SUCCESSFUL_LOGIN.name())){
-                    user = (User) reader.readObject();
-                    waitResponse.await();
-                } else if (serverResponse.equals(RequestResponse.LOGIN_ERROR.name())) {
-                    waitResponse.await();
-                } else if (serverResponse.equals(RequestResponse.SUCCESSFUL_REGISTRATION.name())) {
-                    registrationRes = true;
-                    waitResponse.await();
-                } else if (serverResponse.equals(RequestResponse.REGISTRATION_ERROR.name())) {
-                    registrationRes = false;
-                    waitResponse.await();
-                } else if (serverResponse.equals(RequestResponse.UPDATE_CHATS.name())) {
-                    Group newGroup = (Group) reader.readObject();
-                    user.addGroup(newGroup);
-                    Platform.runLater(() -> client.addGroup(newGroup));
-                } else if (serverResponse.equals(RequestResponse.UPDATE_MESSAGES.name())) {
-                    List<String> data = (List<String>) reader.readObject();
-                    Group group = user.getGroup(data.getFirst());
-                    if (group != null) {
-                        group.sendMessage(data.get(1));
-                        if (currentGroup != null && currentGroup.getName().equals(data.get(0))) {
-                            Platform.runLater(() -> client.addMessage(data.get(1)));
+                if (serverResponse.getTitle().equals(SUCCESSFUL_LOGIN)){
+                    currentUser = serverResponse.getField("user");
+                    Platform.runLater(() -> client.logIn(true));
+                } else if (serverResponse.getTitle().equals(LOGIN_ERROR)) {
+                    Platform.runLater(() -> client.logIn(false));
+                } else if (serverResponse.getTitle().equals(SUCCESSFUL_REGISTRATION)) {
+                    Platform.runLater(() -> client.registration(true));
+                } else if (serverResponse.getTitle().equals(REGISTRATION_ERROR)) {
+                    Platform.runLater(() -> client.registration(false));
+                } else if (serverResponse.getTitle().equals(UPDATE_CHATS)) {
+                    Group newChat = serverResponse.getField("chat");
+                    currentUser.addChat(newChat);
+                    Platform.runLater(() -> client.addChat(newChat));
+                } else if (serverResponse.getTitle().equals(UPDATE_MESSAGES)) {
+                    String chatName = serverResponse.getField("chatName");
+                    String message = serverResponse.getField("message");
+                    Group chat = currentUser.getChat(chatName);
+                    if (chat != null) {
+                        chat.sendMessage(message);
+                        if (currentChat != null && currentChat.getName().equals(chatName)) {
+                            Platform.runLater(() -> client.addMessage(message));
                         }
                     }
-                } else if (serverResponse.equals(RequestResponse.DELETE_FRIEND.name())) {
-                    User deleteFriend = (User) reader.readObject();
-                    user.getFriends().remove(deleteFriend);
+                } else if (serverResponse.getTitle().equals(DELETE_FRIEND)) {
+                    User deleteFriend = serverResponse.getField("deleteFriend");
+                    currentUser.getFriends().remove(deleteFriend);
                     Platform.runLater(() -> client.deleteFriend(deleteFriend));
-                } else if (serverResponse.equals(RequestResponse.ADD_FRIEND.name())) {
-                    User newFriend = (User) reader.readObject();
-                    user.getFriends().add(newFriend);
+                } else if (serverResponse.getTitle().equals(ADD_FRIEND)) {
+                    User newFriend = serverResponse.getField("newFriend");
+                    currentUser.getFriends().add(newFriend);
                     Platform.runLater(() -> client.addFriend(newFriend));
-                } else if (serverResponse.equals(RequestResponse.REMOVE_FR_FOR_USER.name())) {
-                    User user1 = (User) reader.readObject();
-                    user.getFRequestsForUser().remove(user1);
+                } else if (serverResponse.getTitle().equals(REMOVE_FR_FOR_USER)) {
+                    User user1 = serverResponse.getField("user");
+                    currentUser.getFRequestsForUser().remove(user1);
                     Platform.runLater(() -> client.removeFRForUser(user1));
-                } else if (serverResponse.equals(RequestResponse.REMOVE_FR_FROM_USER.name())) {
-                    User user1 = (User) reader.readObject();
-                    user.getFRequestsFromUser().remove(user1);
+                } else if (serverResponse.getTitle().equals(REMOVE_FR_FROM_USER)) {
+                    User user1 = serverResponse.getField("user");
+                    currentUser.getFRequestsFromUser().remove(user1);
                     Platform.runLater(() -> client.removeFRFromUser(user1));
-                } else if (serverResponse.equals(RequestResponse.ADD_FR_FOR_USER.name())) {
-                    User user1 = (User) reader.readObject();
-                    user.getFRequestsForUser().add(user1);
+                } else if (serverResponse.getTitle().equals(ADD_FR_FOR_USER)) {
+                    User user1 = serverResponse.getField("user");
+                    currentUser.getFRequestsForUser().add(user1);
                     Platform.runLater(() -> client.addFRForUser(user1));
-                } else if (serverResponse.equals(RequestResponse.ADD_FR_FROM_USER.name())) {
-                    User user1 = (User) reader.readObject();
-                    user.getFRequestsFromUser().add(user1);
+                } else if (serverResponse.getTitle().equals(ADD_FR_FROM_USER)) {
+                    User user1 = serverResponse.getField("user");
+                    currentUser.getFRequestsFromUser().add(user1);
                     Platform.runLater(() -> client.addFRFromUser(user1));
-                } else if (serverResponse.equals(RequestResponse.DELETE_GROUP.name()) ||
-                        serverResponse.equals(RequestResponse.DELETE_CHAT.name())) {
-                    Group group = (Group) reader.readObject();
-                    user.deleteGroup(group);
-                    Platform.runLater(() -> client.deleteGroup(group));
-                } else if (serverResponse.equals(RequestResponse.DELETE_MEMBER.name())) {
-                    List<Object> data = (List<Object>) reader.readObject();
-                    user.getGroup((String) data.getFirst()).deleteMember((User) data.getLast());
+                }  else if (serverResponse.getTitle().equals(DELETE_GROUP) ||
+                        serverResponse.getTitle().equals(DELETE_CHAT)) {
+                    Group group = serverResponse.getField("chat");
+                    currentUser.deleteChat(group);
+                    Platform.runLater(() -> client.deleteChat(group));
+                } else if (serverResponse.getTitle().equals(DELETE_MEMBER)) {
+                    String chatName = serverResponse.getField("chatName");
+                    User user = serverResponse.getField("deleteUser");
+                    currentUser.getChat(chatName).deleteMember(user);
                 }
             } catch (SocketException socketException) {
                 break;
-            } catch (IOException | ClassNotFoundException | BrokenBarrierException | InterruptedException e) {
-                throw new RuntimeException(e);
+            } catch (IOException | ClassNotFoundException e) {
+                client.showError("Connection problems");
             }
         }
     }
 
     public void exit(){
         try {
-            writer.writeUTF(RequestResponse.EXIT.name());
+            writer.writeObject(new RequestResponse(EXIT));
             writer.flush();
             writer.close();
             reader.close();
+        } catch (IOException ignored) {}
+    }
+
+    public void registration(String username, String password){
+        try {
+            RequestResponse request = new RequestResponse(REGISTRATION);
+            request.setField("username", username);
+            request.setField("password", password);
+            writer.writeObject(request);
+            writer.flush();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            client.showError("Registration error");
         }
     }
 
-    public boolean registration(String username, String password){
+    public void login(String username, String password) {
         try {
-            writer.writeUTF(RequestResponse.REGISTRATION.name());
-            writer.writeUTF(username);
-            writer.writeUTF(password);
+            RequestResponse request = new RequestResponse(LOG_IN);
+            request.setField("username", username);
+            request.setField("password", password);
+            writer.writeObject(request);
             writer.flush();
-            waitResponse.await();
-            return registrationRes;
-        } catch (IOException | InterruptedException | BrokenBarrierException e) {
-            throw new RuntimeException(e);
+        } catch (IOException e) {
+            client.showError("Login error");
         }
     }
 
-    public boolean login(String username, String password) {
-        try {
-            writer.writeUTF(RequestResponse.LOG_IN.name());
-            writer.writeUTF(username);
-            writer.writeUTF(password);
-            writer.flush();
-            waitResponse.await();
-        } catch (InterruptedException | BrokenBarrierException | IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        return user != null;
+    public List<Group> getChats(){
+        return currentUser.getChats();
     }
 
-    public List<Group> getGroups(){
-        return user.getGroups();
-    }
-
-    public void setCurrentChat(Group group) {
-        currentGroup = group;
-        try {
-            writer.writeUTF(RequestResponse.SET_CURRENT_CHAT.name());
-            writer.writeObject(group.getName());
-            writer.flush();
-        }catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public void setCurrentChat(Group chat) {
+        currentChat = chat;
     }
 
     public List<String> getMessages(){
-        return currentGroup.getMessages();
+        return currentChat.getMessages();
     }
 
-    public void createGroup(String title, List<String> users){
+    public void createGroup(String title, ArrayList<String> users){
         try {
-            writer.writeUTF(RequestResponse.CREATE_GROUP.name());
-            writer.writeUTF(title);
-            writer.writeObject(users);
-            writer.flush();
+            RequestResponse request = new RequestResponse(CREATE_GROUP);
+            request.setField("name", title);
+            request.setField("members", users);
+            writer.writeObject(request);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -170,8 +155,9 @@ public class Controller implements Runnable{
 
     public void createChat(String user){
         try {
-            writer.writeUTF(RequestResponse.CREATE_CHAT.name());
-            writer.writeUTF(user);
+            RequestResponse response = new RequestResponse(CREATE_CHAT);
+            response.setField("username", user);
+            writer.writeObject(response);
             writer.flush();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -180,101 +166,99 @@ public class Controller implements Runnable{
 
     public void sendMessage(String message){
         try {
-            writer.writeUTF(RequestResponse.SEND_MESSAGE.name());
-            writer.writeUTF(message);
+            RequestResponse request = new RequestResponse(SEND_MESSAGE);
+            request.setField("chatName", currentChat.getName());
+            request.setField("message", message);
+            writer.writeObject(request);
             writer.flush();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            client.showError("Connection error");
         }
     }
 
     public Group getCurrentChat() {
-        return currentGroup;
+        return currentChat;
     }
 
     public List<User> getFriends(){
-        return user.getFriends();
+        return currentUser.getFriends();
     }
 
     public List<User> getFRequestsForUser(){
-        return user.getFRequestsForUser();
+        return currentUser.getFRequestsForUser();
     }
 
     public List<User> getFRequestsFromUser(){
-        return user.getFRequestsFromUser();
+        return currentUser.getFRequestsFromUser();
     }
 
     public void deleteFriend(User friend){
         try {
-            writer.writeUTF(RequestResponse.DELETE_FRIEND.name());
-            writer.writeUTF(friend.getUsername());
+            RequestResponse request = new RequestResponse(DELETE_FRIEND);
+            request.setField("friendUsername", friend.getUsername());
+            writer.writeObject(request);
             writer.flush();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            client.showError("Delete friend error");
         }
     }
 
     public void addFriend(User friend){
         try {
-            writer.writeUTF(RequestResponse.ADD_FRIEND.name());
-            writer.writeUTF(friend.getUsername());
+            RequestResponse request = new RequestResponse(ADD_FRIEND);
+            request.setField("friendUsername", friend.getUsername());
+            writer.writeObject(request);
             writer.flush();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            client.showError("Add friend error");
         }
     }
 
     public void removeFRForUser(User user){
         try{
-            writer.writeUTF(RequestResponse.REMOVE_FR_FOR_USER.name());
-            writer.writeUTF(user.getUsername());
+            RequestResponse request = new RequestResponse(REMOVE_FR_FOR_USER);
+            request.setField("username", user.getUsername());
+            writer.writeObject(request);
             writer.flush();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            client.showError("Connection error");
         }
     }
 
     public void removeFRFromUser(User user){
         try{
-            writer.writeUTF(RequestResponse.REMOVE_FR_FROM_USER.name());
-            writer.writeUTF(user.getUsername());
+            RequestResponse request = new RequestResponse(REMOVE_FR_FROM_USER);
+            request.setField("username", user.getUsername());
+            writer.writeObject(request);
             writer.flush();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            client.showError("Connection error");
         }
     }
 
     public void sendFriendRequest(String username){
         try {
-            writer.writeUTF(RequestResponse.SEND_FRIEND_REQUEST.name());
-            writer.writeUTF(username);
+            RequestResponse request = new RequestResponse(SEND_FRIEND_REQUEST);
+            request.setField("username", username);
+            writer.writeObject(request);
             writer.flush();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            client.showError("Connection error");
         }
     }
 
     public User getCurrentUser(){
-        return user;
+        return currentUser;
     }
-
-    public void deleteGroup(Group group){
+    
+    public void deleteChat(Group chat){
         try {
-            writer.writeUTF(RequestResponse.DELETE_GROUP.name());
-            writer.writeUTF(group.getName());
+            RequestResponse request = new RequestResponse(DELETE_CHAT);
+            request.setField("chatName", chat.getName());
+            writer.writeObject(request);
             writer.flush();
         } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public void deleteChat(Chat chat){
-        try {
-            writer.writeUTF(RequestResponse.DELETE_CHAT.name());
-            writer.writeUTF(chat.getName());
-            writer.flush();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            client.showError("Connection error");
         }
     }
 }

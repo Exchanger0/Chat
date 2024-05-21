@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class User implements Serializable {
     private final String username;
     private final String password;
-    private final ConcurrentHashMap<String, Group> groups = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Group> chats = new ConcurrentHashMap<>();
     private final List<User> friends = new ArrayList<>();
     private final List<User> fRequestsForUser = new ArrayList<>();
     private final List<User> fRequestsFromUser = new ArrayList<>();
@@ -27,20 +27,20 @@ public class User implements Serializable {
         return this.password.equals(password);
     }
 
-    public List<Group> getGroups() {
-        return new ArrayList<>(groups.values());
+    public List<Group> getChats() {
+        return new ArrayList<>(chats.values());
     }
 
-    public Group getGroup(String name){
-        return groups.get(name);
+    public Group getChat(String name){
+        return chats.get(name);
     }
 
-    public void addGroup(Group group) {
-        groups.put(group.getName(), group);
+    public void addChat(Group chat) {
+        chats.put(chat.getName(), chat);
     }
 
-    public void deleteGroup(Group group){
-        groups.remove(group.getName());
+    public void deleteChat(Group chat){
+        chats.remove(chat.getName());
     }
 
     public boolean deleteFriend(User user){
@@ -107,6 +107,16 @@ public class User implements Serializable {
         }
     }
 
+    public boolean addFriend(User user){
+        synchronized (friends) {
+            if (!friends.contains(user)) {
+                friends.add(user);
+                return true;
+            }
+            return false;
+        }
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -120,13 +130,10 @@ public class User implements Serializable {
         return Objects.hash(username, password);
     }
 
-    public boolean addFriend(User user){
-        synchronized (friends) {
-            if (!friends.contains(user)) {
-                friends.add(user);
-                return true;
-            }
-            return false;
-        }
+    @Override
+    public String toString() {
+        return "User{" +
+                "username='" + username + '\'' +
+                '}';
     }
 }
