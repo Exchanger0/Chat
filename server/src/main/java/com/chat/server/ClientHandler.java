@@ -1,10 +1,12 @@
 package com.chat.server;
 
 
-import com.chat.shared.Chat;
-import com.chat.shared.Group;
-import com.chat.shared.RequestResponse;
-import com.chat.shared.User;
+import com.chat.server.model.AbstractChat;
+import com.chat.server.model.Chat;
+import com.chat.server.model.Group;
+import com.chat.server.model.User;
+import com.chat.shared.*;
+import org.hibernate.Session;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -15,8 +17,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.stream.Collectors;
 
 import static com.chat.shared.RequestResponse.Title.*;
 
@@ -51,46 +55,58 @@ public class ClientHandler implements Runnable {
 
             while (!Thread.currentThread().isInterrupted() && (request = (RequestResponse) reader.readObject()) != null) {
                 if (request.getTitle().equals(REGISTRATION)) {
-                    System.out.println("Start registration");
+                    System.out.println("\nStart registration");
                     registration(request);
                     System.out.println("End registration");
                 } else if (request.getTitle().equals(LOG_IN)) {
-                    System.out.println("Start login");
+                    System.out.println("\nStart login");
                     logIn(request);
                     System.out.println("End login. Current user: "
                             + (currentUser != null ? currentUser.getUsername() : " error"));
                 } else if (request.getTitle().equals(CREATE_GROUP)) {
+                    System.out.println("\nCreate group");
                     createGroup(request);
-                    System.out.println("Create group '" + request.getField("name") + "' by '"
+                    System.out.println("Create group '" + request.getField("chatName") + "' by '"
                             + currentUser.getUsername() + "'");
                 } else if (request.getTitle().equals(CREATE_CHAT)) {
+                    System.out.println("\nCreate chat");
                     createChat(request);
                     System.out.println("'" + currentUser.getUsername() + "' create chat");
                 } else if (request.getTitle().equals(DELETE_GROUP)) {
+                    System.out.println("\nDelete group");
                     deleteGroup(request);
-                    System.out.println("delete group '" + request.getField("groupName") + "' by '"
+                    System.out.println("delete group '" + request.getField("chatName") + "' by '"
                             + currentUser.getUsername() + "'");
                 } else if (request.getTitle().equals(DELETE_CHAT)) {
+                    System.out.println("\nCreate chat");
                     deleteChat(request);
                     System.out.println("delete chat '" + request.getField("chatName") + "' by '"
                             + currentUser.getUsername() + "'");
+                } else if (request.getTitle().equals(GET_CHAT)) {
+                    getChat(request);
                 } else if (request.getTitle().equals(SEND_MESSAGE)) {
+                    System.out.println("\nSend message");
                     sendMessage(request);
                     System.out.println("'" + currentUser.getUsername() + "' send message to chat '"
                             + request.getField("chatName") + "'");
                 } else if (request.getTitle().equals(DELETE_FRIEND)) {
+                    System.out.println("\nDelete friend");
                     deleteFriend(request);
                     System.out.println("'" + currentUser.getUsername() + "' delete friend '"
-                            + request.getField("friendUsername" + "'"));
+                            + request.getField("username" + "'"));
                 } else if (request.getTitle().equals(ADD_FRIEND)) {
+                    System.out.println("\nAdd friend");
                     addFriend(request);
                     System.out.println("'" + currentUser.getUsername() + "' add friend '"
-                            + request.getField("friendUsername") + "'");
+                            + request.getField("username") + "'");
                 } else if (request.getTitle().equals(REMOVE_FR_FOR_USER)) {
+                    System.out.println("\nRemove fr_for_user");
                     removeFRForUser(request);
                 } else if (request.getTitle().equals(REMOVE_FR_FROM_USER)) {
+                    System.out.println("\nRemove fr_from_user");
                     removeFRFromUser(request);
                 } else if (request.getTitle().equals(SEND_FRIEND_REQUEST)) {
+                    System.out.println("\nSend friend request");
                     sendFriendRequest(request);
                 } else if (request.getTitle().equals(EXIT)) {
                     System.out.println("Exit from system " + currThreadName);
@@ -112,149 +128,18 @@ public class ClientHandler implements Runnable {
         String username = request.getField("username");
         String password = request.getField("password");
 
-        User user = new User(username, getHash(password));
-        boolean res = server.addUser(user);
-        if (res){
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            User user = new User(username, getHash(password));
+            session.persist(user);
+            session.getTransaction().commit();
             responses.add(new RequestResponse(SUCCESSFUL_REGISTRATION));
-        }else {
+        }catch (Exception ex){
+            session.getTransaction().rollback();
             responses.add(new RequestResponse(REGISTRATION_ERROR));
-        }
-    }
-
-    private void createGroup(RequestResponse request) {
-        Group group = new Group(request.getField("name"));
-        group.addMember(currentUser);
-        ArrayList<String> memberNames = request.getField("members");
-        RequestResponse response = new RequestResponse(UPDATE_CHATS);
-        response.setField("chat", group);
-        for (String memberName : memberNames){
-            User user = server.getUser(memberName);
-            if (user != null) {
-                user.addChat(group);
-                server.notifyClientHandlers(user, response);
-                group.addMember(user);
-            }
-        }
-        currentUser.addChat(group);
-        server.notifyClientHandlers(currentUser, response);
-    }
-
-    private void createChat(RequestResponse request) {
-        User user = server.getUser(request.getField("username"));
-        if (user != null) {
-            Chat chat = new Chat(currentUser, user);
-            user.addChat(chat);
-            currentUser.addChat(chat);
-            RequestResponse response = new RequestResponse(UPDATE_CHATS);
-            response.setField("chat", chat);
-            server.notifyClientHandlers(user, response);
-            server.notifyClientHandlers(currentUser, response);
-        }
-    }
-
-    private void deleteGroup(RequestResponse request) {
-        Group group = currentUser.getChat(request.getField("groupName"));
-        group.deleteMember(currentUser);
-        currentUser.deleteChat(group);
-        RequestResponse response = new RequestResponse(DELETE_MEMBER);
-        response.setField("groupName", group.getName());
-        response.setField("deleteUser", currentUser);
-        for (User user : group.getMembers()){
-            server.notifyClientHandlers(user, response);
-        }
-        RequestResponse response1 = new RequestResponse(DELETE_GROUP);
-        response1.setField("chat", group);
-        server.notifyClientHandlers(currentUser, response1);
-    }
-
-    private void deleteChat(RequestResponse request) {
-        Group chat = currentUser.getChat(request.getField("chatName"));
-        RequestResponse response = new RequestResponse(DELETE_CHAT);
-        response.setField("chat", chat);
-        for (User user : chat.getMembers()){
-            user.deleteChat(chat);
-            server.notifyClientHandlers(user, response);
-        }
-    }
-
-    private void sendMessage(RequestResponse request) {
-        String message = currentUser.getUsername() + ": " + request.getField("message");
-        Group chat = currentUser.getChat(request.getField("chatName"));
-        chat.sendMessage(message);
-        RequestResponse response = new RequestResponse(UPDATE_MESSAGES);
-        response.setField("chatName", chat.getName());
-        response.setField("message", currentUser.getUsername() + ": " + message);
-        for (User user : chat.getMembers()){
-            server.notifyClientHandlers(user, response);
-        }
-    }
-
-    private void deleteFriend(RequestResponse request) {
-        User deleteFriend = server.getUser(request.getField("friendUsername"));
-        if (currentUser.deleteFriend(deleteFriend) && deleteFriend.deleteFriend(currentUser)) {
-            RequestResponse response = new RequestResponse(DELETE_FRIEND);
-            response.setField("deleteFriend", deleteFriend);
-            server.notifyClientHandlers(currentUser, response);
-            RequestResponse response1 = new RequestResponse(DELETE_FRIEND);
-            response1.setField("deleteFriend", currentUser);
-            server.notifyClientHandlers(deleteFriend, response1);
-        }
-    }
-
-    private void addFriend(RequestResponse request) {
-        User newFriend = server.getUser(request.getField("friendUsername"));
-        if (currentUser.addFriend(newFriend) && newFriend.addFriend(currentUser)
-                && currentUser.deleteFRequestForUser(newFriend) && newFriend.deleteFRequestFromUser(currentUser)){
-            RequestResponse response = new RequestResponse(REMOVE_FR_FOR_USER);
-            response.setField("user", newFriend);
-            RequestResponse response1 = new RequestResponse(ADD_FRIEND);
-            response1.setField("newFriend", newFriend);
-            server.notifyClientHandlers(currentUser, response);
-            server.notifyClientHandlers(currentUser, response1);
-            RequestResponse response2 = new RequestResponse(REMOVE_FR_FROM_USER);
-            response2.setField("user", currentUser);
-            RequestResponse response3 = new RequestResponse(ADD_FRIEND);
-            response3.setField("newFriend", currentUser);
-            server.notifyClientHandlers(newFriend, response2);
-            server.notifyClientHandlers(newFriend, response3);
-        }
-    }
-
-    private void removeFRForUser(RequestResponse request) {
-        User user = server.getUser(request.getField("username"));
-        if (currentUser.deleteFRequestForUser(user) && user.deleteFRequestFromUser(currentUser)) {
-            RequestResponse response = new RequestResponse(REMOVE_FR_FOR_USER);
-            response.setField("user", user);
-            server.notifyClientHandlers(currentUser, response);
-            RequestResponse response1 = new RequestResponse(REMOVE_FR_FROM_USER);
-            response1.setField("user", currentUser);
-            server.notifyClientHandlers(user, response1);
-        }
-    }
-
-    private void removeFRFromUser(RequestResponse request) {
-        User user = server.getUser(request.getField("username"));
-        if (currentUser.deleteFRequestFromUser(user) && user.deleteFRequestForUser(currentUser)) {
-            RequestResponse response = new RequestResponse(REMOVE_FR_FROM_USER);
-            response.setField("user", user);
-            server.notifyClientHandlers(currentUser, response);
-            RequestResponse response1 = new RequestResponse(REMOVE_FR_FOR_USER);
-            response1.setField("user", currentUser);
-            server.notifyClientHandlers(user, response1);
-        }
-    }
-
-    private void sendFriendRequest(RequestResponse request) {
-        User user = server.getUser(request.getField("username"));
-        if (user != null){
-            if (currentUser.addFRequestFromUser(user) && user.addFRequestForUser(currentUser)){
-                RequestResponse response = new RequestResponse(ADD_FR_FROM_USER);
-                response.setField("user", user);
-                server.notifyClientHandlers(currentUser, response);
-                RequestResponse response1 = new RequestResponse(ADD_FR_FOR_USER);
-                response1.setField("user", currentUser);
-                server.notifyClientHandlers(user, response1);
-            }
+        }finally {
+            session.close();
         }
     }
 
@@ -262,19 +147,391 @@ public class ClientHandler implements Runnable {
         String username = request.getField("username");
         String password = request.getField("password");
 
-        User user = server.getUser(username, getHash(password));
-        RequestResponse.Title title;
-        if (user != null) {
-            currentUser = user;
-            server.addClientHandler(user, this);
-            title = SUCCESSFUL_LOGIN;
-        } else {
-            title = LOGIN_ERROR;
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+
+            User user = session.createQuery(
+                "SELECT u FROM User u " +
+                        "LEFT JOIN u.friends " +
+                        "LEFT JOIN u.fRequestsForUser " +
+                        "LEFT JOIN u.fRequestsFromUser " +
+                        "LEFT JOIN u.chats " +
+                        "where u.username = :username and u.password = :password", User.class)
+
+                    .setParameter("username", username).setParameter("password", getHash(password))
+                    .getSingleResult();
+
+            if (user != null) {
+                currentUser = user;
+                server.addClientHandler(user, this);
+                RequestResponse response = new RequestResponse(SUCCESSFUL_LOGIN);
+                response.setField("username", user.getUsername());
+                response.setField("chatData", user.getChats()
+                        .stream()
+                        .map(chat -> {
+                            ChatType type = ChatType.GROUP;
+                            String publicName = chat.getName();
+                            if (chat instanceof Chat ch) {
+                                type = ChatType.CHAT;
+                                publicName = ch.getPseudonym(currentUser);
+                            }
+                            return new ChatData(chat.getId(), type, publicName, chat.getName());
+                        })
+                        .collect(Collectors.toCollection(ArrayList::new)));
+                response.setField("friends", user.getFriends()
+                        .stream()
+                        .map(User::getUsername)
+                        .collect(Collectors.toCollection(ArrayList::new)));
+                response.setField("fRequestsForUser", user.getFRequestsForUser()
+                        .stream()
+                        .map(User::getUsername)
+                        .collect(Collectors.toCollection(ArrayList::new)));
+                response.setField("fRequestsFromUser", user.getFRequestsFromUser()
+                        .stream()
+                        .map(User::getUsername)
+                        .collect(Collectors.toCollection(ArrayList::new)));
+                responses.add(response);
+            }
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            RequestResponse response = new RequestResponse(LOGIN_ERROR);
+            responses.add(response);
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
         }
-        RequestResponse response = new RequestResponse(title);
-        response.setField("user", user);
-        responses.add(response);
+
     }
+
+    private void createGroup(RequestResponse request) {
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            Group group = new Group(request.getField("chatName"));
+
+            ArrayList<String> memberNames = request.getField("members");
+            memberNames.add(currentUser.getUsername());
+
+            List<User> users = session.createQuery("select u from User u where u.username in :name_list", User.class)
+                    .setParameter("name_list", memberNames)
+                    .getResultList();
+
+            session.persist(group);
+            RequestResponse response = new RequestResponse(UPDATE_CHATS);
+            response.setField("id", group.getId());
+            response.setField("type", ChatType.GROUP);
+            response.setField("chatName", group.getName());
+            response.setField("members", memberNames);
+
+            for (User user : users) {
+                group.addMember(user);
+                server.notifyClientHandlers(user, response);
+            }
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            session.getTransaction().rollback();
+        } finally {
+            session.close();
+        }
+    }
+
+    private void createChat(RequestResponse request) {
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            currentUser = session.get(User.class, currentUser.getId());
+
+            User user = session.createQuery("select u from User u where u.username = :name", User.class)
+                    .setParameter("name", request.getField("username"))
+                    .getSingleResult();
+
+            if (user != null) {
+                Chat chat = new Chat(currentUser, user);
+                chat.addMember(currentUser);
+                chat.addMember(user);
+                session.persist(chat);
+                RequestResponse response = new RequestResponse(UPDATE_CHATS);
+                response.setField("id", chat.getId());
+                response.setField("type", ChatType.CHAT);
+                response.setField("members", new ArrayList<>(List.of(currentUser.getUsername(), user.getUsername())));
+                server.notifyClientHandlers(user, response);
+                server.notifyClientHandlers(currentUser, response);
+            }
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
+        }
+    }
+
+    private void deleteGroup(RequestResponse request) {
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            currentUser = session.get(User.class, currentUser.getId());
+
+            AbstractChat group = currentUser.getChat(request.getField("id"));
+            group.deleteMember(currentUser);
+            currentUser.deleteChat(group);
+
+            if (group.getMembers().isEmpty()) {
+                session.remove(group);
+            }else {
+                RequestResponse response = new RequestResponse(DELETE_MEMBER);
+                response.setField("id", group.getId());
+                response.setField("chatName", group.getName());
+                response.setField("username", currentUser.getUsername());
+                for (User user : group.getMembers()) {
+                    server.notifyClientHandlers(user, response);
+                }
+            }
+            RequestResponse response1 = new RequestResponse(DELETE_GROUP);
+            response1.setField("id", group.getId());
+            server.notifyClientHandlers(currentUser, response1);
+
+            session.getTransaction().commit();
+        }catch (Exception ex){
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
+        }
+    }
+
+    private void deleteChat(RequestResponse request) {
+        System.out.println(currentUser.getUsername() + " delete chat " + request.getField("chatName"));
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            currentUser = session.get(User.class, currentUser.getId());
+
+            AbstractChat chat = currentUser.getChat(request.getField("id"));
+
+            RequestResponse response = new RequestResponse(DELETE_CHAT);
+            response.setField("id", chat.getId());
+
+            for (User user : chat.getMembers()) {
+                user.deleteChat(chat);
+                server.notifyClientHandlers(user, response);
+            }
+            session.remove(chat);
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
+        }
+    }
+
+    private void sendMessage(RequestResponse request) {
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            currentUser = session.get(User.class, currentUser.getId());
+
+            String message = currentUser.getUsername() + ": " + request.getField("message");
+            AbstractChat chat = currentUser.getChat(request.getField("id"));
+            chat.sendMessage(message);
+            RequestResponse response = new RequestResponse(UPDATE_MESSAGES);
+            response.setField("id", chat.getId());
+            response.setField("chatName", chat.getName());
+            response.setField("message", message);
+            for (User user : chat.getMembers()) {
+                server.notifyClientHandlers(user, response);
+            }
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
+        }
+    }
+
+    private void deleteFriend(RequestResponse request) {
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            currentUser = session.get(User.class, currentUser.getId());
+
+            User deleteFriend = session.createQuery("select df from User df where df.username = :username", User.class)
+                    .setParameter("username",request.getField("friendUsername"))
+                    .getSingleResult();
+            if (currentUser.deleteFriend(deleteFriend)
+                    && deleteFriend.deleteFriend(currentUser)) {
+                RequestResponse response = new RequestResponse(DELETE_FRIEND);
+                response.setField("username", deleteFriend.getUsername());
+                server.notifyClientHandlers(currentUser, response);
+                RequestResponse response1 = new RequestResponse(DELETE_FRIEND);
+                response1.setField("username", currentUser.getUsername());
+                server.notifyClientHandlers(deleteFriend, response1);
+            }
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
+        }
+    }
+
+
+    private void addFriend(RequestResponse request) {
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            currentUser = session.get(User.class, currentUser.getId());
+            User newFriend  = session.createQuery("select nf from User nf where nf.username = :username", User.class)
+                    .setParameter("username", request.getField("friendUsername"))
+                    .getSingleResult();
+
+            System.out.println(currentUser.getFriends() + "\n" +
+                    currentUser.getFRequestsForUser() + "\n" +
+                    currentUser.getFRequestsFromUser() + "\n--------\n" +
+                    newFriend.getFriends() + "\n" +
+                    newFriend.getFRequestsForUser() + "\n" +
+                    newFriend.getFRequestsFromUser());
+
+            if (!currentUser.getFriends().contains(newFriend) && !newFriend.getFriends().contains(currentUser)) {
+                currentUser.addFriend(newFriend);
+                newFriend.addFriend(currentUser);
+                currentUser.deleteFRequestForUser(newFriend);
+                newFriend.deleteFRequestFromUser(currentUser);
+
+                RequestResponse response = new RequestResponse(REMOVE_FR_FOR_USER);
+                response.setField("username", newFriend.getUsername());
+                RequestResponse response1 = new RequestResponse(ADD_FRIEND);
+                response1.setField("username", newFriend.getUsername());
+                server.notifyClientHandlers(currentUser, response);
+                server.notifyClientHandlers(currentUser, response1);
+                RequestResponse response2 = new RequestResponse(REMOVE_FR_FROM_USER);
+                response2.setField("username", currentUser.getUsername());
+                RequestResponse response3 = new RequestResponse(ADD_FRIEND);
+                response3.setField("username", currentUser.getUsername());
+                server.notifyClientHandlers(newFriend, response2);
+                server.notifyClientHandlers(newFriend, response3);
+            }
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
+        }
+    }
+
+    private void removeFRForUser(RequestResponse request) {
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            currentUser = session.get(User.class, currentUser.getId());
+
+            User user = session.createQuery("select u from User u where u.username = :username", User.class)
+                    .setParameter("username", request.getField("username"))
+                    .getSingleResult();
+            currentUser.deleteFRequestForUser(user);
+            user.deleteFRequestFromUser(currentUser);
+
+            RequestResponse response = new RequestResponse(REMOVE_FR_FOR_USER);
+            response.setField("username", user.getUsername());
+            server.notifyClientHandlers(currentUser, response);
+            RequestResponse response1 = new RequestResponse(REMOVE_FR_FROM_USER);
+            response1.setField("username", currentUser.getUsername());
+            server.notifyClientHandlers(user, response1);
+
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
+        }
+    }
+
+    private void removeFRFromUser(RequestResponse request) {
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            currentUser = session.get(User.class, currentUser.getId());
+
+            User user = session.createQuery("select u from User u where u.username = :username", User.class)
+                    .setParameter("username", request.getField("username"))
+                    .getSingleResult();
+            currentUser.deleteFRequestFromUser(user);
+            user.deleteFRequestForUser(currentUser);
+            RequestResponse response = new RequestResponse(REMOVE_FR_FROM_USER);
+            response.setField("username", user.getUsername());
+            server.notifyClientHandlers(currentUser, response);
+            RequestResponse response1 = new RequestResponse(REMOVE_FR_FOR_USER);
+            response1.setField("username", currentUser.getUsername());
+            server.notifyClientHandlers(user, response1);
+
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
+        }
+    }
+
+    private void sendFriendRequest(RequestResponse request) {
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            currentUser = session.get(User.class, currentUser.getId());
+
+            System.out.println("Send frequest from: " + currentUser.getUsername() + " for " + request.getField("username"));
+            User user = session.createQuery("select u from User u where u.username = :username", User.class)
+                    .setParameter("username", request.getField("username"))
+                    .getSingleResult();
+            if (user != null) {
+                if (currentUser.canAddFRequestFromUser(user) && user.canAddFRequestForUser(currentUser)) {
+                    currentUser.addFRequestFromUser(user);
+                    user.addFRequestForUser(currentUser);
+
+                    RequestResponse response = new RequestResponse(ADD_FR_FROM_USER);
+                    response.setField("username", user.getUsername());
+                    server.notifyClientHandlers(currentUser, response);
+                    RequestResponse response1 = new RequestResponse(ADD_FR_FOR_USER);
+                    response1.setField("username", currentUser.getUsername());
+                    server.notifyClientHandlers(user, response1);
+
+                    session.persist(user);
+                }
+            }
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
+        }
+    }
+
+    private void getChat(RequestResponse request) {
+        Session session = server.getSessionFactory().openSession();
+        try {
+            session.beginTransaction();
+            currentUser = session.get(User.class, currentUser.getId());
+
+            AbstractChat chat = currentUser.getChat(request.getField("id"));
+            ChatType type = ChatType.GROUP;
+            if (chat instanceof Chat) type = ChatType.CHAT;
+            RequestResponse response = new RequestResponse(GET_CHAT);
+            response.setField("id", chat.getId());
+            response.setField("type", type);
+            response.setField("chatName", request.getField("chatName"));
+            response.setField("members", chat.getMembers()
+                    .stream()
+                    .map(User::getUsername)
+                    .collect(Collectors.toCollection(ArrayList::new)));
+            response.setField("messages", new ArrayList<>(chat.getMessages()));
+            addServerResponse(response);
+
+            session.getTransaction().commit();
+        }catch (Exception ex) {
+            session.getTransaction().rollback();
+        }finally {
+            session.close();
+        }
+    }
+
 
     private String getHash(String input) {
         try {

@@ -1,6 +1,5 @@
 package com.chat.client.elements;
 
-import com.chat.shared.User;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
@@ -17,7 +16,7 @@ public class CreateChatMenu extends VBox {
     private final Button okButton;
     private final Button cancelButton;
 
-    public CreateChatMenu(List<User> friendsList) {
+    public CreateChatMenu(List<String> friendsList) {
         setSpacing(10);
         setPadding(new Insets(5));
         setAlignment(Pos.CENTER);
@@ -39,8 +38,8 @@ public class CreateChatMenu extends VBox {
         toggleGroup.selectedToggleProperty().addListener((observer, oldVal, newVal) -> {
             selectedUser = ((RadioButton) newVal).getText();
         });
-        for (User user : friendsList){
-            RadioButton radioButton = new RadioButton(user.getUsername());
+        for (String user : friendsList){
+            RadioButton radioButton = new RadioButton(user);
             radioButton.setToggleGroup(toggleGroup);
             friends.getChildren().add(radioButton);
         }

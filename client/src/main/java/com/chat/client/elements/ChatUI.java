@@ -1,6 +1,6 @@
 package com.chat.client.elements;
 
-import com.chat.shared.User;
+import com.chat.shared.ChatData;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
@@ -18,21 +18,21 @@ import java.util.List;
 
 
 public class ChatUI extends HBox {
+    private final ChatData data;
     private final VBox members = new VBox();
     private final Button backButton;
     private final Button sendButton = new Button("\u2A65");
     private final TextField message;
     private final VBox messages;
 
-    public ChatUI(String name, List<User> membersList) {
+    public ChatUI(ChatData data, List<String> membersList) {
+        this.data = data;
         messages = new VBox();
         messages.setAlignment(Pos.TOP_LEFT);
         messages.setSpacing(10);
         messages.setPadding(new Insets(15));
         messages.setFillWidth(true);
-        messages.maxWidthProperty().bind(
-                Stage.getWindows().getFirst().widthProperty().subtract(60)
-        );
+        messages.maxWidthProperty().bind(Stage.getWindows().getFirst().widthProperty().subtract(60));
 
         ScrollPane msgScrollPane = new ScrollPane();
         msgScrollPane.setContent(messages);
@@ -41,9 +41,7 @@ public class ChatUI extends HBox {
                 new BorderStroke(Color.rgb(99, 108, 118), BorderStrokeStyle.SOLID,
                         null, new BorderWidths(1))));
 
-        messages.heightProperty().addListener((ob, oldVal, newVal) -> {
-            msgScrollPane.setVvalue(1D);
-        });
+        messages.heightProperty().addListener((ob, oldVal, newVal) -> msgScrollPane.setVvalue(1D));
 
         BorderPane chatPane = new BorderPane();
         chatPane.setCenter(msgScrollPane);
@@ -58,7 +56,7 @@ public class ChatUI extends HBox {
         backButton = new Button("\u2190");
         topPane.add(backButton, 0,0);
 
-        Label chatNameLabel = new Label(name);
+        Label chatNameLabel = new Label(data.publicName());
         chatNameLabel.setFont(new Font(15));
         chatNameLabel.setOnMouseClicked(getMembers(membersList));
         topPane.add(chatNameLabel, 1,0);
@@ -87,7 +85,7 @@ public class ChatUI extends HBox {
         getChildren().add(chatPane);
     }
 
-    private EventHandler<MouseEvent> getMembers(List<User> membersList) {
+    private EventHandler<MouseEvent> getMembers(List<String> membersList) {
         return e -> {
             if (getChildren().size() < 2) {
                 if (members.getChildren().isEmpty()) {
@@ -102,8 +100,7 @@ public class ChatUI extends HBox {
                     topBox.setSpacing(20);
                     VBox.setMargin(topBox, new Insets(12, 10, 12, 10));
 
-                    ListView<String> membersName = new ListView<>(FXCollections.observableList(membersList
-                            .stream().map(User::getUsername).toList()));
+                    ListView<String> membersName = new ListView<>(FXCollections.observableList(membersList));
                     membersName.setSelectionModel(null);
                     membersName.setFocusModel(null);
 
@@ -136,4 +133,9 @@ public class ChatUI extends HBox {
         text.setWrapText(true);
         messages.getChildren().add(text);
     }
+
+    public ChatData getData() {
+        return data;
+    }
+
 }

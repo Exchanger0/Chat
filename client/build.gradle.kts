@@ -23,3 +23,7 @@ javafx {
 application {
     mainClass = "com.chat.client.UIClient"
 }
+
+tasks.withType<JavaCompile> {
+    options.encoding = "UTF-8"
+}

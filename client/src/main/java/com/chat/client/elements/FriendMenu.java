@@ -1,6 +1,5 @@
 package com.chat.client.elements;
 
-import com.chat.shared.User;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
@@ -13,12 +12,12 @@ import java.util.List;
 
 public class FriendMenu extends VBox {
 
-    private final ListView<User> friends;
-    private final ListView<User> frForUser;
-    private final ListView<User> frFromUser;
+    private final ListView<String> friends;
+    private final ListView<String> frForUser;
+    private final ListView<String> frFromUser;
     private final TextField username;
     private final Button sendRequest;
-    public FriendMenu(List<User> friendsList, List<User> frForUserList, List<User> frFromUserList) {
+    public FriendMenu(List<String> friendsList, List<String> frForUserList, List<String> frFromUserList) {
         setPadding(new Insets(10));
 
         friends = new ListView<>();
@@ -56,15 +55,15 @@ public class FriendMenu extends VBox {
                 new TitledPane("Friend requests from you", frFromUser));
     }
 
-    public void setFriendsCellFactory(Callback<ListView<User>, ListCell<User>> factory){
+    public void setFriendsCellFactory(Callback<ListView<String>, ListCell<String>> factory){
         friends.setCellFactory(factory);
     }
 
-    public void setFRForUserCellFactory(Callback<ListView<User>, ListCell<User>> factory){
+    public void setFRForUserCellFactory(Callback<ListView<String>, ListCell<String>> factory){
         frForUser.setCellFactory(factory);
     }
 
-    public void setFRFromUserCellFactory(Callback<ListView<User>, ListCell<User>> factory){
+    public void setFRFromUserCellFactory(Callback<ListView<String>, ListCell<String>> factory){
         frFromUser.setCellFactory(factory);
     }
 
@@ -72,19 +71,19 @@ public class FriendMenu extends VBox {
         sendRequest.setOnAction(action);
     }
 
-    public void deleteFriend(User friend){
+    public void deleteFriend(String friend){
         friends.getItems().remove(friend);
     }
 
-    public void addFriend(User friend){
+    public void addFriend(String friend){
             friends.getItems().add(friend);
     }
 
-    public void removeFRForUser(User user){
+    public void removeFRForUser(String user){
         frForUser.getItems().remove(user);
     }
 
-    public void removeFRFromUser(User user){
+    public void removeFRFromUser(String user){
         frFromUser.getItems().remove(user);
     }
 
@@ -92,11 +91,11 @@ public class FriendMenu extends VBox {
         return username;
     }
 
-    public void addFRForUser(User user){
+    public void addFRForUser(String user){
         frForUser.getItems().add(user);
     }
 
-    public void addFRFromUser(User user){
+    public void addFRFromUser(String user){
         frFromUser.getItems().add(user);
     }
 

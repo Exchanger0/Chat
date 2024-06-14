@@ -1,7 +1,14 @@
+package com.chat.server.model;
 
-package com.chat.shared;
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
 
-public class Chat extends Group {
+@Entity
+@DiscriminatorValue("C")
+public class Chat extends AbstractChat {
+    public Chat() {
+    }
+
     public Chat(User user1, User user2) {
         super(user1.getUsername() + "_" + user2.getUsername());
         addMember(user1);

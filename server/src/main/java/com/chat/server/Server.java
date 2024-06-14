@@ -2,7 +2,12 @@ package com.chat.server;
 
 
 import com.chat.shared.RequestResponse;
-import com.chat.shared.User;
+import com.chat.server.model.User;
+import org.hibernate.SessionFactory;
+import org.hibernate.boot.Metadata;
+import org.hibernate.boot.MetadataSources;
+import org.hibernate.boot.registry.StandardServiceRegistry;
+import org.hibernate.boot.registry.StandardServiceRegistryBuilder;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -11,16 +16,13 @@ import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Server {
-    //список пользователей
-    private final ConcurrentHashMap<String, User> users = new ConcurrentHashMap<>();
     //список созданных потоков
     private final ConcurrentHashMap<String,Thread> threads = new ConcurrentHashMap<>();
     private boolean isStop = false;
     //сеансы всех клиентов одного пользователя
     private final ConcurrentHashMap<User, ArrayList<ClientHandler>> userSessions = new ConcurrentHashMap<>();
 
-    private Server() {
-    }
+    private SessionFactory sessionFactory;
 
     public static void main(String[] args) {
         Server server = new Server();
@@ -33,6 +35,13 @@ public class Server {
                 isStop = true;
                 interruptAllThreads();
             }));
+
+            System.out.println(this.getClass().getResource("/hibernate.cfg.xml"));
+            StandardServiceRegistry serviceRegistry = new StandardServiceRegistryBuilder().configure(
+                    this.getClass().getResource("/hibernate.cfg.xml")
+            ).build();
+            Metadata metadata = new MetadataSources(serviceRegistry).getMetadataBuilder().build();
+            sessionFactory = metadata.getSessionFactoryBuilder().build();
 
             ServerSocket serverSocket = new ServerSocket(8099);
             while (!isStop) {
@@ -55,27 +64,6 @@ public class Server {
         for (Thread t : threads.values()){
             t.interrupt();
         }
-    }
-
-    //добавляем пользователя
-    public boolean addUser(User user) {
-        User res = users.putIfAbsent(user.getUsername(), user);
-        return res == null;
-    }
-
-    public User getUser(String username, String password) {
-        User u = users.get(username);
-        if (u == null) {
-            return null;
-        }
-        if (u.equalsPassword(password)) {
-            return u;
-        }
-        return null;
-    }
-
-    public User getUser(String username) {
-        return users.get(username);
     }
 
     //удаление нерабочего потока
@@ -108,4 +96,7 @@ public class Server {
         userSessions.get(user).remove(handler);
     }
 
+    public SessionFactory getSessionFactory() {
+        return sessionFactory;
+    }
 }

@@ -1,7 +1,10 @@
 package com.chat.client.elements;
 
-import com.chat.shared.Group;
-import javafx.collections.ObservableList;
+import com.chat.client.model.AbstractChat;
+import com.chat.client.model.Chat;
+import com.chat.shared.ChatData;
+import com.chat.shared.ChatType;
+import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
@@ -15,13 +18,17 @@ import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import javafx.util.Callback;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 public class ChatMenu extends BorderPane {
-    private final ListView<Group> chats;
+    private final ListView<ChatData> chatNames;
     private final Button createChat;
-    public ChatMenu(ObservableList<Group> chatList) {
-        chats = new ListView<>();
-        chats.setItems(chatList);
-        chats.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+    public ChatMenu(List<ChatData> chatList) {
+        chatNames = new ListView<>();
+        chatNames.setItems(FXCollections.observableList(new ArrayList<>(chatList)));
+        chatNames.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
 
         //создает новый чат
         createChat = new Button("+");
@@ -31,11 +38,11 @@ public class ChatMenu extends BorderPane {
         BorderPane.setMargin(createChat, new Insets(5));
 
         setTop(createChat);
-        setCenter(chats);
+        setCenter(chatNames);
     }
 
-    public void setListCellFactory(Callback<ListView<Group>, ListCell<Group>> factory){
-        chats.setCellFactory(factory);
+    public void setListCellFactory(Callback<ListView<ChatData>, ListCell<ChatData>> factory){
+        chatNames.setCellFactory(factory);
     }
 
 
@@ -43,15 +50,15 @@ public class ChatMenu extends BorderPane {
         createChat.setOnAction(action);
     }
 
-    public ListView<Group> getChats() {
-        return chats;
+    public ListView<ChatData> getChatNames() {
+        return chatNames;
     }
 
-    public void addChat(Group chat){
-        chats.getItems().add(chat);
+    public void addChat(ChatData data){
+        chatNames.getItems().add(data);
     }
 
-    public void deleteChat(Group chat){
-        chats.getItems().remove(chat);
+    public void deleteChat(int id){
+        chatNames.getItems().removeIf(data -> data.id() == id);
     }
 }

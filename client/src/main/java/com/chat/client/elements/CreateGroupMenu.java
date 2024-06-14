@@ -1,6 +1,5 @@
 package com.chat.client.elements;
 
-import com.chat.shared.User;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
@@ -18,7 +17,7 @@ public class CreateGroupMenu extends VBox {
     private final Button cancelButton;
     private final TextField titleField;
 
-    public CreateGroupMenu(List<User> friendsList) {
+    public CreateGroupMenu(List<String> friendsList) {
         setSpacing(10);
         setAlignment(Pos.CENTER);
 
@@ -39,8 +38,8 @@ public class CreateGroupMenu extends VBox {
         friends.setPadding(new Insets(5));
         friends.setSpacing(5);
 
-        for (User user : friendsList){
-            CheckBox checkBox = new CheckBox(user.getUsername());
+        for (String user : friendsList){
+            CheckBox checkBox = new CheckBox(user);
             checkBox.selectedProperty().addListener((observer, oldVal, newVal) -> {
                 if (newVal){
                     selectedUsers.add(checkBox.getText());
