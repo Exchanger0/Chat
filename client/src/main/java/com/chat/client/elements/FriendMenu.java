@@ -1,14 +1,14 @@
 package com.chat.client.elements;
 
-import javafx.event.ActionEvent;
-import javafx.event.EventHandler;
+import com.chat.client.Client;
+import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.util.Callback;
 
-import java.util.List;
+import java.util.ArrayList;
 
 public class FriendMenu extends VBox {
 
@@ -16,35 +16,32 @@ public class FriendMenu extends VBox {
     private final ListView<String> frForUser;
     private final ListView<String> frFromUser;
     private final TextField username;
-    private final Button sendRequest;
-    public FriendMenu(List<String> friendsList, List<String> frForUserList, List<String> frFromUserList) {
+    private final Client client;
+
+    public FriendMenu(Client client) {
+        this.client = client;
         setPadding(new Insets(10));
 
-        friends = new ListView<>();
+        friends = new ListView<>(FXCollections.observableList(new ArrayList<>(client.controller.getFriends())));
         friends.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+        friends.setCellFactory(getFriendCellFactory());
 
-        frForUser = new ListView<>();
+        frForUser = new ListView<>(FXCollections.observableList(new ArrayList<>(client.controller.getFRequestsForUser())));
         frForUser.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+        frForUser.setCellFactory(getFRForUserCellFactory());
 
-        frFromUser = new ListView<>();
+        frFromUser = new ListView<>(FXCollections.observableList(new ArrayList<>(client.controller.getFRequestsFromUser())));
         frFromUser.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
-
-        for (int i = 0; i < Math.max(friendsList.size(), Math.max(frForUserList.size(), frFromUserList.size())); i++) {
-            if (i < friendsList.size()){
-                friends.getItems().add(friendsList.get(i));
-            }
-            if (i < frForUserList.size()){
-                frForUser.getItems().add(frForUserList.get(i));
-            }
-            if (i < frFromUserList.size()){
-                frFromUser.getItems().add(frFromUserList.get(i));
-            }
-        }
+        frFromUser.setCellFactory(getFRFromUserCellFactory());
 
         username = new TextField();
 
-        sendRequest = new Button("Send friend request");
+        Button sendRequest = new Button("Send friend request");
         sendRequest.disableProperty().bind(username.textProperty().isEmpty());
+        sendRequest.setOnAction(e1 -> {
+            client.controller.sendFriendRequest(username.getText());
+            username.setText("");
+        });
 
         HBox hBox = new HBox(username, sendRequest);
         hBox.setSpacing(10);
@@ -55,20 +52,88 @@ public class FriendMenu extends VBox {
                 new TitledPane("Friend requests from you", frFromUser));
     }
 
-    public void setFriendsCellFactory(Callback<ListView<String>, ListCell<String>> factory){
-        friends.setCellFactory(factory);
+    //настраивает отображение списка друзей
+    private Callback<ListView<String>, ListCell<String>> getFriendCellFactory() {
+        return new Callback<>() {
+            @Override
+            public ListCell<String> call(ListView<String> userListView) {
+                ListCell<String> listCell = new ListCell<>() {
+                    @Override
+                    protected void updateItem(String username, boolean empty) {
+                        super.updateItem(username, empty);
+                        if (username == null && empty) {
+                            setText("");
+                        } else {
+                            setText(username);
+                        }
+                    }
+                };
+
+                MenuItem delete = new MenuItem("Delete");
+                delete.setOnAction(e -> client.controller.deleteFriend(listCell.getItem()));
+                listCell.setContextMenu(new ContextMenu(delete));
+                return listCell;
+            }
+        };
     }
 
-    public void setFRForUserCellFactory(Callback<ListView<String>, ListCell<String>> factory){
-        frForUser.setCellFactory(factory);
+    //настраивает отображение списка запросов на дружбу для текущего пользователя
+    private Callback<ListView<String>, ListCell<String>> getFRForUserCellFactory() {
+        return new Callback<>() {
+            @Override
+            public ListCell<String> call(ListView<String> userListView) {
+                ListCell<String> listCell = new ListCell<>() {
+                    @Override
+                    protected void updateItem(String username, boolean empty) {
+                        super.updateItem(username, empty);
+                        if (username == null && empty) {
+                            setText("");
+                        } else {
+                            setText(username);
+                        }
+                    }
+                };
+
+                MenuItem disagree = new MenuItem("Disagree");
+                disagree.setOnAction(e -> client.controller.removeFRForUser(listCell.getItem()));
+
+                MenuItem agree = new MenuItem("Agree");
+                agree.setOnAction(e -> {
+                    String username = listCell.getItem();
+                    if (username != null){
+                        client.controller.addFriend(username);
+                    }
+                });
+                listCell.setContextMenu(new ContextMenu(disagree, agree));
+                return listCell;
+            }
+        };
     }
 
-    public void setFRFromUserCellFactory(Callback<ListView<String>, ListCell<String>> factory){
-        frFromUser.setCellFactory(factory);
-    }
+    //настраивает отображение списка запросов на дружбу от текущего пользователя
+    private Callback<ListView<String>, ListCell<String>> getFRFromUserCellFactory() {
+        return new Callback<>() {
+            @Override
+            public ListCell<String> call(ListView<String> userListView) {
+                ListCell<String> listCell = new ListCell<>() {
+                    @Override
+                    protected void updateItem(String username, boolean empty) {
+                        super.updateItem(username, empty);
+                        if (username == null && empty) {
+                            setText("");
+                        } else {
+                            setText(username);
+                        }
+                    }
+                };
 
-    public void setSendRequestAction(EventHandler<ActionEvent> action){
-        sendRequest.setOnAction(action);
+                MenuItem cancellation = new MenuItem("Cancellation");
+                cancellation.setOnAction(e -> client.controller.removeFRFromUser(listCell.getItem()));
+
+                listCell.setContextMenu(new ContextMenu(cancellation));
+                return listCell;
+            }
+        };
     }
 
     public void deleteFriend(String friend){
@@ -87,16 +152,18 @@ public class FriendMenu extends VBox {
         frFromUser.getItems().remove(user);
     }
 
-    public TextField getUsernameField(){
-        return username;
-    }
-
     public void addFRForUser(String user){
         frForUser.getItems().add(user);
     }
 
     public void addFRFromUser(String user){
         frFromUser.getItems().add(user);
+    }
+
+    public void refresh() {
+        friends.refresh();
+        frForUser.refresh();
+        frFromUser.refresh();
     }
 
 }

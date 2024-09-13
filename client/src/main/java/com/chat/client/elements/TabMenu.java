@@ -6,17 +6,13 @@ import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.VPos;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.TabPane;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 
 import java.util.ArrayList;
 
-public class CTabPane extends VBox {
-//    private final VBox main = new VBox();
+public class TabMenu extends VBox {
     private final GridPane header = new GridPane();
     private final GridPane content = new GridPane();
     private final ArrayList<Node> nodes = new ArrayList<>();
@@ -32,7 +28,7 @@ public class CTabPane extends VBox {
         setCurrentButton((Button) actionEvent.getSource());
     };
 
-    public CTabPane() {
+    public TabMenu() {
         header.setBorder(new Border(new BorderStroke(null, null, Color.GREY, null,
                 null, null, BorderStrokeStyle.SOLID, null,
                 null, new BorderWidths(1), new Insets(0))));

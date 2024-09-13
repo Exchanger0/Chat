@@ -16,14 +16,14 @@ import static com.chat.shared.RequestResponse.Title.*;
 
 
 public class Controller implements Runnable{
-    private final UIClient client;
+    private final Client client;
     private final ObjectInputStream reader;
     private final ObjectOutputStream writer;
     private User currentUser;
     private final CyclicBarrier wait = new CyclicBarrier(2);
     private AbstractChat loadedChat;
 
-    public Controller(UIClient client, Socket socket) throws IOException {
+    public Controller(Client client, Socket socket) throws IOException {
         this.client = client;
         this.writer = new ObjectOutputStream(socket.getOutputStream());
         this.reader = new ObjectInputStream(socket.getInputStream());
@@ -35,98 +35,107 @@ public class Controller implements Runnable{
             try {
                 RequestResponse serverResponse = (RequestResponse) reader.readObject();
 
-                if (serverResponse.getTitle().equals(SUCCESSFUL_LOGIN)){
-                    currentUser = new User(serverResponse.getField("username"));
-                    currentUser.setChatData(serverResponse.getField("chatData"));
-                    currentUser.setFriends(serverResponse.getField("friends"));
-                    currentUser.setfRequestsForUser(serverResponse.getField("fRequestsForUser"));
-                    currentUser.setfRequestsFromUser(serverResponse.getField("fRequestsFromUser"));
-                    Platform.runLater(() -> client.logIn(true));
-                } else if (serverResponse.getTitle().equals(LOGIN_ERROR)) {
-                    Platform.runLater(() -> client.logIn(false));
-                } else if (serverResponse.getTitle().equals(SUCCESSFUL_REGISTRATION)) {
-                    Platform.runLater(() -> client.registration(true));
-                } else if (serverResponse.getTitle().equals(REGISTRATION_ERROR)) {
-                    Platform.runLater(() -> client.registration(false));
-                } else if (serverResponse.getTitle().equals(UPDATE_CHATS)) {
-                    AbstractChat chat;
-                    ChatType type = serverResponse.getField("type");
-                    String publicName;
-                    String privateName;
-                    if (type == ChatType.CHAT) {
-                        chat = new Chat(serverResponse.getField("id"),
-                                serverResponse.<ArrayList<String>>getField("members").getFirst(),
-                                serverResponse.<ArrayList<String>>getField("members").get(1));
-                        publicName = ((Chat) chat).getPseudonym(currentUser.getUsername());
-                        privateName = chat.getName();
-                    } else if (type == ChatType.GROUP) {
-                        chat = new Group(serverResponse.getField("id"), serverResponse.getField("chatName"));
-                        chat.setMembers(serverResponse.getField("members"));
-                        publicName = chat.getName();
-                        privateName = chat.getName();
-                    } else {
-                        chat = null;
-                        privateName = "";
-                        publicName = "";
+                switch (serverResponse.getTitle()) {
+                    case SUCCESSFUL_LOGIN -> {
+                        currentUser = new User(serverResponse.getField("username"));
+                        currentUser.setChatData(serverResponse.getField("chatData"));
+                        currentUser.setFriends(serverResponse.getField("friends"));
+                        currentUser.setfRequestsForUser(serverResponse.getField("fRequestsForUser"));
+                        currentUser.setfRequestsFromUser(serverResponse.getField("fRequestsFromUser"));
+                        Platform.runLater(client::successLogIn);
                     }
-                    currentUser.addChat(chat);
-                    Platform.runLater(() -> client.addChat(new ChatData(chat.getId(), type, publicName, privateName)));
-                } else if (serverResponse.getTitle().equals(GET_CHAT)) {
-                    ChatType type = serverResponse.getField("type");
-                    if (type == ChatType.GROUP) {
-                        loadedChat = new Group(serverResponse.getField("id"), serverResponse.getField("chatName"));
-                        loadedChat.setMembers(serverResponse.getField("members"));
-                    } else if (type == ChatType.CHAT) {
-                        loadedChat = new Chat(serverResponse.getField("id"),
-                                serverResponse.<ArrayList<String>>getField("members").getFirst(),
-                                serverResponse.<ArrayList<String>>getField("members").getLast());
+                    case LOGIN_ERROR -> Platform.runLater(() -> client.getLogInMenu().setError("Invalid name and/or password"));
+                    case SUCCESSFUL_REGISTRATION -> login(serverResponse.getField("username"), serverResponse.getField("password"));
+                    case REGISTRATION_ERROR -> Platform.runLater(() -> client.getRegistrationMenu().setError("User with this name already exists"));
+                    case UPDATE_CHATS -> {
+                        AbstractChat chat;
+                        ChatType type = serverResponse.getField("type");
+                        String publicName;
+                        String privateName;
+                        if (type == ChatType.CHAT) {
+                            chat = new Chat(serverResponse.getField("id"),
+                                    serverResponse.<ArrayList<String>>getField("members").getFirst(),
+                                    serverResponse.<ArrayList<String>>getField("members").get(1));
+                            publicName = ((Chat) chat).getPseudonym(currentUser.getUsername());
+                            privateName = chat.getName();
+                        } else if (type == ChatType.GROUP) {
+                            chat = new Group(serverResponse.getField("id"), serverResponse.getField("chatName"));
+                            chat.setMembers(serverResponse.getField("members"));
+                            publicName = chat.getName();
+                            privateName = chat.getName();
+                        } else {
+                            chat = null;
+                            privateName = "";
+                            publicName = "";
+                        }
+                        currentUser.addChat(chat);
+                        Platform.runLater(() -> client.addChat(new ChatData(chat.getId(), type, publicName, privateName)));
                     }
-                    loadedChat.setMessages(serverResponse.getField("messages"));
-                    currentUser.addChat(loadedChat);
-                    wait.await();
-                } else if (serverResponse.getTitle().equals(UPDATE_MESSAGES)) {
-                    int id = serverResponse.getField("id");
-                    String message = serverResponse.getField("message");
-                    AbstractChat chat = currentUser.getChat(id);
-                    if (chat != null) {
-                        chat.sendMessage(message);
-                        Platform.runLater(() -> client.addMessage(id, message));
+                    case GET_CHAT -> {
+                        ChatType type = serverResponse.getField("type");
+                        if (type == ChatType.GROUP) {
+                            loadedChat = new Group(serverResponse.getField("id"), serverResponse.getField("chatName"));
+                            loadedChat.setMembers(serverResponse.getField("members"));
+                        } else if (type == ChatType.CHAT) {
+                            loadedChat = new Chat(serverResponse.getField("id"),
+                                    serverResponse.<ArrayList<String>>getField("members").getFirst(),
+                                    serverResponse.<ArrayList<String>>getField("members").getLast());
+                        }
+                        loadedChat.setMessages(serverResponse.getField("messages"));
+                        currentUser.addChat(loadedChat);
+                        wait.await();
                     }
-                } else if (serverResponse.getTitle().equals(DELETE_FRIEND)) {
-                    String username = serverResponse.getField("username");
-                    currentUser.deleteFriend(username);
-                    Platform.runLater(() -> client.deleteFriend(username));
-                } else if (serverResponse.getTitle().equals(ADD_FRIEND)) {
-                    String username = serverResponse.getField("username");
-                    currentUser.addFriend(username);
-                    Platform.runLater(() -> client.addFriend(username));
-                } else if (serverResponse.getTitle().equals(REMOVE_FR_FOR_USER)) {
-                    String username = serverResponse.getField("username");
-                    currentUser.deleteFRequestForUser(username);
-                    Platform.runLater(() -> client.removeFRForUser(username));
-                } else if (serverResponse.getTitle().equals(REMOVE_FR_FROM_USER)) {
-                    String username = serverResponse.getField("username");
-                    currentUser.deleteFRequestFromUser(username);
-                    Platform.runLater(() -> client.removeFRFromUser(username));
-                } else if (serverResponse.getTitle().equals(ADD_FR_FOR_USER)) {
-                    String username = serverResponse.getField("username");
-                    currentUser.addFRequestForUser(username);
-                    Platform.runLater(() -> client.addFRForUser(username));
-                } else if (serverResponse.getTitle().equals(ADD_FR_FROM_USER)) {
-                    String username = serverResponse.getField("username");
-                    currentUser.addFRequestFromUser(username);
-                    Platform.runLater(() -> client.addFRFromUser(username));
-                }  else if (serverResponse.getTitle().equals(DELETE_GROUP) ||
-                        serverResponse.getTitle().equals(DELETE_CHAT)) {
-                    int id = serverResponse.getField("id");
-                    currentUser.deleteChat(id);
-                    Platform.runLater(() -> client.deleteChat(id));
-                } else if (serverResponse.getTitle().equals(DELETE_MEMBER)) {
-                    int id = serverResponse.getField("id");
-                    String username = serverResponse.getField("username");
-                    AbstractChat chat = currentUser.getChat(id);
-                    if (chat != null) {
-                        chat.deleteMember(username);
+                    case UPDATE_MESSAGES -> {
+                        int id = serverResponse.getField("id");
+                        String message = serverResponse.getField("message");
+                        AbstractChat chat = currentUser.getChat(id);
+                        if (chat != null) {
+                            chat.sendMessage(message);
+                            Platform.runLater(() -> client.addMessage(id, message));
+                        }
+                    }
+                    case DELETE_FRIEND -> {
+                        String username = serverResponse.getField("username");
+                        currentUser.deleteFriend(username);
+                        Platform.runLater(() -> client.deleteFriend(username));
+                    }
+                    case ADD_FRIEND -> {
+                        String username = serverResponse.getField("username");
+                        currentUser.addFriend(username);
+                        Platform.runLater(() -> client.addFriend(username));
+                    }
+                    case REMOVE_FR_FOR_USER -> {
+                        String username = serverResponse.getField("username");
+                        currentUser.deleteFRequestForUser(username);
+                        Platform.runLater(() -> client.removeFRForUser(username));
+                    }
+                    case REMOVE_FR_FROM_USER -> {
+                        String username = serverResponse.getField("username");
+                        currentUser.deleteFRequestFromUser(username);
+                        Platform.runLater(() -> client.removeFRFromUser(username));
+                    }
+                    case ADD_FR_FOR_USER -> {
+                        String username = serverResponse.getField("username");
+                        currentUser.addFRequestForUser(username);
+                        Platform.runLater(() -> client.addFRForUser(username));
+                    }
+                    case ADD_FR_FROM_USER -> {
+                        String username = serverResponse.getField("username");
+                        currentUser.addFRequestFromUser(username);
+                        Platform.runLater(() -> client.addFRFromUser(username));
+                    }
+                    case DELETE_GROUP, DELETE_CHAT -> {
+                        int id = serverResponse.getField("id");
+                        currentUser.deleteChat(id);
+                        Platform.runLater(() -> client.deleteChat(id));
+                    }
+                    case DELETE_MEMBER -> {
+                        int id = serverResponse.getField("id");
+                        String username = serverResponse.getField("username");
+                        AbstractChat chat = currentUser.getChat(id);
+                        if (chat != null) {
+                            chat.deleteMember(username);
+                        }
                     }
                 }
             } catch (SocketException socketException) {
@@ -174,10 +183,6 @@ public class Controller implements Runnable{
 
     public List<ChatData> getChatNames(){
         return currentUser.getChatData();
-    }
-
-    public List<String> getMessages(int id){
-        return currentUser.getChat(id).getMessages();
     }
 
     public void createGroup(String title, ArrayList<String> users){
@@ -318,5 +323,9 @@ public class Controller implements Runnable{
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    public User getCurrentUser() {
+        return currentUser;
     }
 }

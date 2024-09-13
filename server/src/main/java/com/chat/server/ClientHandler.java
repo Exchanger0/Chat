@@ -52,68 +52,81 @@ public class ClientHandler implements Runnable {
             RequestResponse request;
             Thread senderThread = new Thread(new Sender(), "Sender"+currThreadName.substring(currThreadName.indexOf("-")));
             senderThread.start();
-
+            outer:
             while (!Thread.currentThread().isInterrupted() && (request = (RequestResponse) reader.readObject()) != null) {
-                if (request.getTitle().equals(REGISTRATION)) {
-                    System.out.println("\nStart registration");
-                    registration(request);
-                    System.out.println("End registration");
-                } else if (request.getTitle().equals(LOG_IN)) {
-                    System.out.println("\nStart login");
-                    logIn(request);
-                    System.out.println("End login. Current user: "
-                            + (currentUser != null ? currentUser.getUsername() : " error"));
-                } else if (request.getTitle().equals(CREATE_GROUP)) {
-                    System.out.println("\nCreate group");
-                    createGroup(request);
-                    System.out.println("Create group '" + request.getField("chatName") + "' by '"
-                            + currentUser.getUsername() + "'");
-                } else if (request.getTitle().equals(CREATE_CHAT)) {
-                    System.out.println("\nCreate chat");
-                    createChat(request);
-                    System.out.println("'" + currentUser.getUsername() + "' create chat");
-                } else if (request.getTitle().equals(DELETE_GROUP)) {
-                    System.out.println("\nDelete group");
-                    deleteGroup(request);
-                    System.out.println("delete group '" + request.getField("chatName") + "' by '"
-                            + currentUser.getUsername() + "'");
-                } else if (request.getTitle().equals(DELETE_CHAT)) {
-                    System.out.println("\nCreate chat");
-                    deleteChat(request);
-                    System.out.println("delete chat '" + request.getField("chatName") + "' by '"
-                            + currentUser.getUsername() + "'");
-                } else if (request.getTitle().equals(GET_CHAT)) {
-                    getChat(request);
-                } else if (request.getTitle().equals(SEND_MESSAGE)) {
-                    System.out.println("\nSend message");
-                    sendMessage(request);
-                    System.out.println("'" + currentUser.getUsername() + "' send message to chat '"
-                            + request.getField("chatName") + "'");
-                } else if (request.getTitle().equals(DELETE_FRIEND)) {
-                    System.out.println("\nDelete friend");
-                    deleteFriend(request);
-                    System.out.println("'" + currentUser.getUsername() + "' delete friend '"
-                            + request.getField("username" + "'"));
-                } else if (request.getTitle().equals(ADD_FRIEND)) {
-                    System.out.println("\nAdd friend");
-                    addFriend(request);
-                    System.out.println("'" + currentUser.getUsername() + "' add friend '"
-                            + request.getField("username") + "'");
-                } else if (request.getTitle().equals(REMOVE_FR_FOR_USER)) {
-                    System.out.println("\nRemove fr_for_user");
-                    removeFRForUser(request);
-                } else if (request.getTitle().equals(REMOVE_FR_FROM_USER)) {
-                    System.out.println("\nRemove fr_from_user");
-                    removeFRFromUser(request);
-                } else if (request.getTitle().equals(SEND_FRIEND_REQUEST)) {
-                    System.out.println("\nSend friend request");
-                    sendFriendRequest(request);
-                } else if (request.getTitle().equals(EXIT)) {
-                    System.out.println("Exit from system " + currThreadName);
-                    responses.add(new RequestResponse(EXIT));
-                    server.deleteClientHandler(currentUser, this);
-                    server.removeThisThread(Thread.currentThread());
-                    break;
+                switch (request.getTitle()) {
+                    case REGISTRATION -> {
+                        System.out.println("\nStart registration");
+                        registration(request);
+                        System.out.println("End registration");
+                    }
+                    case LOG_IN -> {
+                        System.out.println("\nStart login");
+                        logIn(request);
+                        System.out.println("End login. Current user: "
+                                + (currentUser != null ? currentUser.getUsername() : " error"));
+                    }
+                    case CREATE_GROUP -> {
+                        System.out.println("\nCreate group");
+                        createGroup(request);
+                        System.out.println("Create group '" + request.getField("chatName") + "' by '"
+                                + currentUser.getUsername() + "'");
+                    }
+                    case CREATE_CHAT ->  {
+                        System.out.println("\nCreate chat");
+                        createChat(request);
+                        System.out.println("'" + currentUser.getUsername() + "' create chat");
+                    }
+                    case DELETE_GROUP -> {
+                        System.out.println("\nDelete group");
+                        deleteGroup(request);
+                        System.out.println("delete group '" + request.getField("chatName") + "' by '"
+                                + currentUser.getUsername() + "'");
+                    }
+                    case DELETE_CHAT -> {
+                        System.out.println("\nCreate chat");
+                        deleteChat(request);
+                        System.out.println("delete chat '" + request.getField("chatName") + "' by '"
+                                + currentUser.getUsername() + "'");
+                    }
+                    case GET_CHAT -> getChat(request);
+                    case SEND_MESSAGE -> {
+                        System.out.println("\nSend message");
+                        sendMessage(request);
+                        System.out.println("'" + currentUser.getUsername() + "' send message to chat '"
+                                + request.getField("chatName") + "'");
+                    }
+                    case DELETE_FRIEND -> {
+                        System.out.println("\nDelete friend");
+                        deleteFriend(request);
+                        System.out.println("'" + currentUser.getUsername() + "' delete friend '"
+                                + request.getField("username" + "'"));
+                    }
+                    case ADD_FRIEND -> {
+                        System.out.println("\nAdd friend");
+                        addFriend(request);
+                        System.out.println("'" + currentUser.getUsername() + "' add friend '"
+                                + request.getField("username") + "'");
+                    }
+                    case REMOVE_FR_FOR_USER -> {
+                        System.out.println("\nRemove fr_for_user");
+                        removeFRForUser(request);
+                    }
+                    case REMOVE_FR_FROM_USER -> {
+                        System.out.println("\nRemove fr_from_user");
+                        removeFRFromUser(request);
+                    }
+                    case SEND_FRIEND_REQUEST -> {
+                        System.out.println("\nSend friend request");
+                        sendFriendRequest(request);
+                    }
+                    case EXIT -> {
+                        System.out.println("Exit from system " + currThreadName);
+                        responses.add(new RequestResponse(EXIT));
+                        server.deleteClientHandler(currentUser, this);
+                        server.removeThisThread(Thread.currentThread());
+                        break outer;
+                    }
                 }
             }
             reader.close();
@@ -134,7 +147,10 @@ public class ClientHandler implements Runnable {
             User user = new User(username, getHash(password));
             session.persist(user);
             session.getTransaction().commit();
-            responses.add(new RequestResponse(SUCCESSFUL_REGISTRATION));
+            RequestResponse response = new RequestResponse(SUCCESSFUL_REGISTRATION);
+            response.setField("username", request.getField("username"));
+            response.setField("password", request.getField("password"));
+            responses.add(response);
         }catch (Exception ex){
             session.getTransaction().rollback();
             responses.add(new RequestResponse(REGISTRATION_ERROR));
@@ -218,6 +234,7 @@ public class ClientHandler implements Runnable {
                     .getResultList();
 
             session.persist(group);
+            System.out.println(group.getId());
             RequestResponse response = new RequestResponse(UPDATE_CHATS);
             response.setField("id", group.getId());
             response.setField("type", ChatType.GROUP);

@@ -1,7 +1,6 @@
 package com.chat.client.elements;
 
-import javafx.event.ActionEvent;
-import javafx.event.EventHandler;
+import com.chat.client.Client;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -10,29 +9,27 @@ import javafx.scene.text.Font;
 
 public class MainMenu extends VBox {
 
-    private final Button registrationButton;
-    private final Button logInButton;
-    public MainMenu() {
+    public MainMenu(Client client) {
         setAlignment(Pos.CENTER);
         setSpacing(15);
 
         Label title = new Label("Chat");
         title.setFont(new Font(50));
 
-        registrationButton = new Button("Registration");
+        Button registrationButton = new Button("Registration");
         registrationButton.setPrefWidth(100);
+        registrationButton.setOnAction(e -> {
+            client.getRegistrationMenu().cleanErrorLabels();
+            client.setRoot(client.getRegistrationMenu());
+        });
 
-        logInButton = new Button("Log in");
+        Button logInButton = new Button("Log in");
         logInButton.setPrefWidth(100);
+        logInButton.setOnAction(e -> {
+            client.getLogInMenu().cleanErrorLabels();
+            client.setRoot(client.getLogInMenu());
+        });
 
         getChildren().addAll(title, registrationButton, logInButton);
-    }
-
-    public void setRegButtonAction(EventHandler<ActionEvent> action){
-        registrationButton.setOnAction(action);
-    }
-
-    public void setLogInButtonAction(EventHandler<ActionEvent> action){
-        logInButton.setOnAction(action);
     }
 }

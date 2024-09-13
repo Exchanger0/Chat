@@ -1,8 +1,9 @@
 package com.chat.client.elements;
 
+import com.chat.client.Client;
+import com.chat.client.model.AbstractChat;
 import com.chat.shared.ChatData;
 import javafx.collections.FXCollections;
-import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -20,12 +21,10 @@ import java.util.List;
 public class ChatUI extends HBox {
     private final ChatData data;
     private final VBox members = new VBox();
-    private final Button backButton;
-    private final Button sendButton = new Button("\u2A65");
     private final TextField message;
     private final VBox messages;
 
-    public ChatUI(ChatData data, List<String> membersList) {
+    public ChatUI(Client client, ChatData data, AbstractChat chat) {
         this.data = data;
         messages = new VBox();
         messages.setAlignment(Pos.TOP_LEFT);
@@ -53,12 +52,13 @@ public class ChatUI extends HBox {
         topPane.getColumnConstraints().addAll(con1, con1);
         topPane.setPadding(new Insets(10));
 
-        backButton = new Button("\u2190");
+        Button backButton = new Button("\u2190");
         topPane.add(backButton, 0,0);
+        backButton.setOnAction(e1 -> client.setRoot(client.getTabMenu()));
 
         Label chatNameLabel = new Label(data.publicName());
         chatNameLabel.setFont(new Font(15));
-        chatNameLabel.setOnMouseClicked(getMembers(membersList));
+        chatNameLabel.setOnMouseClicked(getMembers(chat.getMembers()));
         topPane.add(chatNameLabel, 1,0);
         chatPane.setTop(topPane);
 
@@ -69,11 +69,20 @@ public class ChatUI extends HBox {
         c.setHgrow(Priority.ALWAYS);
         sendPane.getColumnConstraints().add(c);
 
+        Button sendButton = new Button("\u2A65");
+
         message = new TextField();
         message.setMaxWidth(Double.MAX_VALUE);
         message.setOnKeyReleased(e -> {
             if (e.getCode().getCode() == KeyCode.ENTER.getCode()){
                 sendButton.fire();
+            }
+        });
+
+        sendButton.setOnAction(e1 -> {
+            if (!message.getText().trim().isEmpty()) {
+                client.controller.sendMessage(data.id(), data.privateName(), message.getText().trim());
+                message.setText("");
             }
         });
 
@@ -83,6 +92,10 @@ public class ChatUI extends HBox {
         chatPane.setBottom(sendPane);
         setHgrow(chatPane, Priority.ALWAYS);
         getChildren().add(chatPane);
+
+        for (String s : chat.getMessages()) {
+            addMessage(s);
+        }
     }
 
     private EventHandler<MouseEvent> getMembers(List<String> membersList) {
@@ -112,18 +125,6 @@ public class ChatUI extends HBox {
         };
     }
 
-    public void setSendButtonAction(EventHandler<ActionEvent> action){
-        sendButton.setOnAction(action);
-    }
-
-    public void setBackButtonAction(EventHandler<ActionEvent> action){
-        backButton.setOnAction(action);
-    }
-
-    public TextField getMessage() {
-        return message;
-    }
-
     public void addMessage(String message){
         Label text = new Label(message);
         text.setWrapText(true);
@@ -137,5 +138,4 @@ public class ChatUI extends HBox {
     public ChatData getData() {
         return data;
     }
-
 }

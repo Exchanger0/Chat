@@ -21,7 +21,7 @@ javafx {
 }
 
 application {
-    mainClass = "com.chat.client.UIClient"
+    mainClass = "com.chat.client.Client"
 }
 
 tasks.withType<JavaCompile> {

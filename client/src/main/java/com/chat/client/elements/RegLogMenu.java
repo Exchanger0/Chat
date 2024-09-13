@@ -1,5 +1,6 @@
 package com.chat.client.elements;
 
+import com.chat.client.Client;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
@@ -11,16 +12,17 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 
-public class RegLogMenu extends GridPane {
+public abstract class RegLogMenu extends GridPane {
 
-    private final Button sendButton;
-    private final Button backButton;
-    private final TextField usernameField;
-    private final TextField passwordField;
+    protected final TextField usernameField;
+    protected final TextField passwordField;
     private final Label errorLabel = new Label();
     private final Label errorUsernameLabel = new Label(" ");
     private final Label errorPasswordLabel = new Label(" ");
-    public RegLogMenu(String title) {
+    protected Client client;
+    public RegLogMenu(Client client, String title) {
+        this.client = client;
+
         setAlignment(Pos.CENTER);
         setHgap(30);
         setVgap(5);
@@ -63,11 +65,13 @@ public class RegLogMenu extends GridPane {
         });
 
         errorLabel.setTextFill(Color.RED);
-        sendButton = new Button("Send");
+        Button sendButton = new Button("Send");
         //пока в usernameField или passwordField введены неверные данные кнопка неактивна
         sendButton.disableProperty().bind(u.not().or(p.not()));
+        sendButton.setOnAction(getSendButtonAction());
 
-        backButton = new Button("Back");
+        Button backButton = new Button("Back");
+        backButton.setOnAction(getBackButtonAction());
 
         ButtonBar buttonBar = new ButtonBar();
         buttonBar.getButtons().addAll(sendButton, backButton);
@@ -91,27 +95,14 @@ public class RegLogMenu extends GridPane {
         add(errorLabel, 0, 6);
     }
 
-    public void setSendButtonAction(EventHandler<ActionEvent> action){
-        sendButton.setOnAction(action);
-    }
+    protected abstract EventHandler<ActionEvent> getSendButtonAction();
 
-    public void send(String username, String passsword){
-        usernameField.setText(username);
-        passwordField.setText(passsword);
-        sendButton.fire();
-    }
-
-
-    public void setBackButtonAction(EventHandler<ActionEvent> action){
-        backButton.setOnAction(action);
-    }
-
-    public TextField getUsernameField(){
-        return usernameField;
-    }
-
-    public TextField getPasswordField(){
-        return passwordField;
+    protected EventHandler<ActionEvent> getBackButtonAction() {
+        return e -> {
+            usernameField.setText("");
+            passwordField.setText("");
+            client.setRoot(client.getMainMenu());
+        };
     }
 
     public void setError(String string){
